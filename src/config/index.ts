@@ -22,6 +22,8 @@ export const ConfigSchema = z.object({
   maxTokensDescribe: z.number().default(1024),
   // OAuth settings
   redirectPort: z.number().default(9876),
+  // Session recording
+  sessionDir: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

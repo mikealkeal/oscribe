@@ -1,0 +1,28 @@
+{
+  "defaultScreen": 0,
+  "dryRun": false,
+  "logLevel": "info",
+  "cursorSize": 128,
+  "model": "claude-sonnet-4-20250514",
+  "maxTokensLocate": 256,
+  "maxTokensDescribe": 1024,
+  "redirectPort": 9876,
+  "sessionDir": null,
+  "_comments": {
+    "defaultScreen": "Default monitor to capture (0 = primary)",
+    "dryRun": "Simulate actions without executing",
+    "logLevel": "Log level: debug, info, warn, error",
+    "cursorSize": "Cursor size in screenshots (32-256, larger = easier for AI)",
+    "model": "Claude model to use for vision",
+    "maxTokensLocate": "Max tokens for element location",
+    "maxTokensDescribe": "Max tokens for screen description",
+    "redirectPort": "OAuth redirect port",
+    "sessionDir": "Custom directory for session recordings. Examples:",
+    "_sessionDirExamples": [
+      "null (default: ~/.osbot/sessions)",
+      "\"C:/Projects/osbot-sessions\" (absolute path)",
+      "\"./sessions\" (relative to current directory)",
+      "\"/tmp/osbot-sessions\" (Linux/Mac)"
+    ]
+  }
+}

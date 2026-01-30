@@ -6,6 +6,7 @@
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { loadConfig } from '../config/index.js';
 
 export interface SessionAction {
   timestamp: string;
@@ -33,7 +34,13 @@ export class SessionRecorder {
 
   constructor(initialRequest: string) {
     const sessionId = this.generateSessionId();
-    const baseDir = join(homedir(), '.osbot', 'sessions');
+    const config = loadConfig();
+
+    // Use configured session dir or default to ~/.osbot/sessions
+    const baseDir = config.sessionDir
+      ? config.sessionDir
+      : join(homedir(), '.osbot', 'sessions');
+
     this.sessionDir = join(baseDir, sessionId);
     this.screenshotDir = join(this.sessionDir, 'screenshots');
 
