@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { captureScreen, listScreens } from '../core/screenshot.js';
 import { click, typeText, hotkey, scroll, moveMouse } from '../core/input.js';
 import { listWindows, focusWindow } from '../core/windows.js';
+import { locateElement } from '../core/vision.js';
 
 // Get version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -43,9 +44,20 @@ const MoveSchema = z.object({
 });
 
 const ClickSchema = z.object({
+  target: z.string().describe('Description of the element to click'),
+  screen: z.number().default(0).describe('Screen number (default: 0)'),
+  window: z.string().optional().describe('Window to focus first (optional)'),
+});
+
+const ClickAtSchema = z.object({
   x: z.number().describe('X coordinate to click'),
   y: z.number().describe('Y coordinate to click'),
   window: z.string().optional().describe('Window to focus first (optional)'),
+});
+
+const LocateSchema = z.object({
+  target: z.string().describe('Description of the element to locate'),
+  screen: z.number().default(0).describe('Screen number (default: 0)'),
 });
 
 const TypeSchema = z.object({
@@ -87,7 +99,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'os_click',
-        description: 'Click at specific screen coordinates',
+        description: 'Click on an element identified by description using AI vision',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            target: { type: 'string', description: 'Description of the element to click (e.g., "Submit button", "File menu")' },
+            screen: { type: 'number', description: 'Screen number (default: 0)' },
+            window: { type: 'string', description: 'Window to focus first (optional)' },
+          },
+          required: ['target'],
+        },
+      },
+      {
+        name: 'os_click_at',
+        description: 'Click at specific screen coordinates (fallback for when exact coordinates are known)',
         inputSchema: {
           type: 'object',
           properties: {
@@ -96,6 +121,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             window: { type: 'string', description: 'Window to focus first (optional)' },
           },
           required: ['x', 'y'],
+        },
+      },
+      {
+        name: 'os_locate',
+        description: 'Locate an element by description and return its coordinates without clicking',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            target: { type: 'string', description: 'Description of the element to locate' },
+            screen: { type: 'number', description: 'Screen number (default: 0)' },
+          },
+          required: ['target'],
         },
       },
       {
@@ -186,7 +223,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'os_click': {
-        const { x, y, window: windowName } = ClickSchema.parse(args);
+        const { target, screen, window: windowName } = ClickSchema.parse(args);
+
+        if (windowName) {
+          await focusWindow(windowName);
+        }
+
+        // Capture screenshot
+        const screenshot = await captureScreen({ screen });
+
+        // Locate element using vision
+        const coords = await locateElement(target, screenshot.base64);
+
+        // Click at located coordinates
+        await click(coords.x, coords.y);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${(coords.confidence ?? 0 * 100).toFixed(0)}% confidence. Clicked successfully.`,
+            },
+          ],
+        };
+      }
+
+      case 'os_click_at': {
+        const { x, y, window: windowName } = ClickAtSchema.parse(args);
 
         if (windowName) {
           await focusWindow(windowName);
@@ -199,6 +262,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Clicked at (${x}, ${y})`,
+            },
+          ],
+        };
+      }
+
+      case 'os_locate': {
+        const { target, screen } = LocateSchema.parse(args);
+
+        // Capture screenshot
+        const screenshot = await captureScreen({ screen });
+
+        // Locate element using vision
+        const coords = await locateElement(target, screenshot.base64);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${(coords.confidence ?? 0 * 100).toFixed(0)}% confidence.`,
             },
           ],
         };

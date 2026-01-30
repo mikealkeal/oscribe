@@ -9,6 +9,24 @@
 
 **OSbot** is a universal fallback for desktop automation when APIs and accessibility frameworks don't work. It uses AI vision (Claude) to understand what's on screen and native OS controls to interact with it.
 
+## Why OSbot?
+
+> **"If you can see it, OSbot can click it."**
+
+| Tool              | Approach               | Limitation                                          |
+| ----------------- | ---------------------- | --------------------------------------------------- |
+| **APIs/CLI**      | Direct integration     | No API = stuck. App must expose programmatic access |
+| **UI Automation** | DOM/Accessibility tree | App must expose UI elements. Fails on canvas/games  |
+| **OSbot**         | Vision + AI            | **Works on anything visible on screen**             |
+
+OSbot is your fallback when traditional automation tools fail:
+
+- **Legacy apps** without APIs
+- **Games and canvas apps** without DOM
+- **Third-party software** you can't modify
+- **Cross-platform testing** without platform-specific tools
+- **Ad-hoc automation** without infrastructure setup
+
 ## Features
 
 - 🎯 **Vision-based** - Locate UI elements by description using Claude vision
@@ -32,10 +50,11 @@ npm link
 osbot init
 osbot login
 
-# Try it out
-osbot screenshot --describe      # Describe what's on screen
-osbot type "hello world"         # Type text
-osbot hotkey "ctrl+a"           # Press keyboard shortcut
+# Try it out - The magic of vision-based clicking!
+osbot click "Submit button"          # Click by description - that's OSbot!
+osbot click "File menu"              # Works on any visible element
+osbot screenshot --describe          # See what Claude sees on screen
+osbot type "hello world"             # Type text anywhere
 ```
 
 ## Installation
@@ -92,12 +111,21 @@ osbot login --logout          # Logout
 osbot login --key sk-ant-xxx  # Use API key instead of OAuth
 ```
 
+#### Vision-Based Clicking (The Core of OSbot!)
+
+```bash
+osbot click "Submit button"              # Click by description - the magic!
+osbot click "File menu"                  # Works on any visible element
+osbot click "Export as PNG" --screen 1   # Target specific monitor
+osbot click "Close" --dry-run            # Preview without clicking
+```
+
 #### Input & Automation
 
 ```bash
-osbot type "hello world"              # Type text
-osbot hotkey "ctrl+c"                 # Press keyboard shortcut
-osbot hotkey "ctrl+shift+esc"         # Multiple modifiers
+osbot type "hello world"                 # Type text
+osbot hotkey "ctrl+c"                    # Press keyboard shortcut
+osbot hotkey "ctrl+shift+esc"            # Multiple modifiers
 ```
 
 #### Screenshots
@@ -185,26 +213,32 @@ Or if using from source:
 
 ### Available MCP Tools
 
-| Tool            | Description             | Parameters              |
-| --------------- | ----------------------- | ----------------------- |
-| `os_move`       | Move mouse cursor       | `x`, `y`                |
-| `os_click`      | Click at coordinates    | `x`, `y`, `window?`     |
-| `os_type`       | Type text               | `text`                  |
-| `os_hotkey`     | Press keyboard shortcut | `keys` (e.g., "ctrl+c") |
-| `os_screenshot` | Capture screenshot      | `screen?` (default: 0)  |
-| `os_windows`    | List open windows       | -                       |
-| `os_focus`      | Focus window            | `window`                |
-| `os_scroll`     | Scroll in direction     | `direction`, `amount?`  |
+| Tool            | Description                                            | Parameters                         |
+| --------------- | ------------------------------------------------------ | ---------------------------------- |
+| `os_click`      | 🎯 **Click by description (vision-based)**             | `target`, `screen?`, `window?`     |
+| `os_locate`     | 🔍 **Locate element, return coordinates**              | `target`, `screen?`                |
+| `os_click_at`   | Click at exact coordinates (fallback)                  | `x`, `y`, `window?`                |
+| `os_move`       | Move mouse cursor                                      | `x`, `y`                           |
+| `os_type`       | Type text                                              | `text`                             |
+| `os_hotkey`     | Press keyboard shortcut                                | `keys` (e.g., "ctrl+c")            |
+| `os_screenshot` | Capture screenshot                                     | `screen?` (default: 0)             |
+| `os_windows`    | List open windows                                      | -                                  |
+| `os_focus`      | Focus window                                           | `window`                           |
+| `os_scroll`     | Scroll in direction                                    | `direction`, `amount?`             |
 
 ### MCP Usage Example
 
 Once configured, you can ask Claude Desktop:
 
-> "Take a screenshot and describe what's on screen"
+> "Take a screenshot and click on the Submit button"
 
-> "Click at coordinates (100, 200)"
+> "Find the File menu and click on Export as PNG"
+
+> "Locate the blue button and tell me its coordinates"
 
 > "Type 'hello world' and press enter"
+
+Claude will use vision-based tools automatically - no need for manual coordinates!
 
 ## Configuration
 
