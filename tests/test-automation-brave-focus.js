@@ -1,62 +1,60 @@
 #!/usr/bin/env node
 /**
- * Test automation avec SessionRecorder
- * Ouvre Brave et va sur Google en enregistrant tout
+ * Test automation avec SessionRecorder - Focus sur Brave existant
  */
 
 import { SessionRecorder } from './dist/src/core/session-recorder.js';
 import { captureScreen } from './dist/src/core/screenshot.js';
+import { focusWindow } from './dist/src/core/windows.js';
 import robot from 'robotjs';
 
-console.log('🎬 Démarrage de la session enregistrée...\n');
+console.log('🎬 Test avec focus sur Brave existant...\n');
 
 async function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function automateWithRecording() {
-  // Créer la session
-  const recorder = new SessionRecorder('Ouvrir Brave et aller sur Google');
-  console.log(`✅ Session créée: ${recorder.getSessionDir()}\n`);
+  const recorder = new SessionRecorder('Focus Brave existant et aller sur Google');
+  console.log(`✅ Session: ${recorder.getSessionDir()}\n`);
 
   try {
-    // Action 1: Screenshot initial
+    // Screenshot initial
     console.log('📸 Screenshot initial...');
     const initialScreen = await captureScreen({ screen: 0 });
     recorder.saveScreenshot(initialScreen.base64, 'initial');
-    await wait(500);
 
-    // Action 2: Ouvrir Brave avec Win+1
-    console.log('📝 Action 1: Ouvrir Brave (Win+1)...');
+    // Action 1: Focus Brave
+    console.log('📝 Action 1: Focus sur Brave...');
     await recorder.recordAction(
-      'hotkey',
-      { keys: 'win+1' },
+      'focus',
+      { window: 'Brave' },
       async () => {
-        robot.keyTap('1', ['command']); // command = Win sur Windows
-        await wait(1000); // Attendre que Brave s'ouvre
+        await focusWindow('Brave');
+        await wait(500);
 
-        const afterOpen = await captureScreen({ screen: 0 });
-        recorder.saveScreenshot(afterOpen.base64, 'brave-opened');
+        const afterFocus = await captureScreen({ screen: 0 });
+        recorder.saveScreenshot(afterFocus.base64, 'brave-focused');
       }
     );
-    console.log('   ✅ Brave ouvert');
+    console.log('   ✅ Brave en focus');
 
-    // Action 3: Nouvel onglet Ctrl+T
+    // Action 2: Nouvel onglet
     console.log('📝 Action 2: Nouvel onglet (Ctrl+T)...');
     await recorder.recordAction(
       'hotkey',
       { keys: 'ctrl+t' },
       async () => {
         robot.keyTap('t', ['control']);
-        await wait(500);
+        await wait(1000);
 
         const afterTab = await captureScreen({ screen: 0 });
         recorder.saveScreenshot(afterTab.base64, 'new-tab');
       }
     );
-    console.log('   ✅ Nouvel onglet créé');
+    console.log('   ✅ Nouvel onglet');
 
-    // Action 4: Taper google.com
+    // Action 3: Taper google.com
     console.log('📝 Action 3: Taper "google.com"...');
     await recorder.recordAction(
       'type',
@@ -66,42 +64,36 @@ async function automateWithRecording() {
         await wait(500);
 
         const afterType = await captureScreen({ screen: 0 });
-        recorder.saveScreenshot(afterType.base64, 'typed-google');
+        recorder.saveScreenshot(afterType.base64, 'typed');
       }
     );
     console.log('   ✅ URL tapée');
 
-    // Action 5: Appuyer sur Enter
-    console.log('📝 Action 4: Valider (Enter)...');
+    // Action 4: Enter
+    console.log('📝 Action 4: Enter...');
     await recorder.recordAction(
       'hotkey',
       { keys: 'enter' },
       async () => {
         robot.keyTap('enter');
-        await wait(2000); // Attendre le chargement de Google
+        await wait(3000);
 
         const afterEnter = await captureScreen({ screen: 0 });
         recorder.saveScreenshot(afterEnter.base64, 'google-loaded');
       }
     );
-    console.log('   ✅ Page Google chargée');
+    console.log('   ✅ Google chargé dans BRAVE');
 
-    // Screenshot final
+    // Final
     console.log('📸 Screenshot final...');
     const finalScreen = await captureScreen({ screen: 0 });
     recorder.saveScreenshot(finalScreen.base64, 'final');
 
-    // Fin de session
-    console.log('\n🎬 Fin de la session...');
     recorder.endSession();
 
-    console.log('\n✅ Session enregistrée avec succès!');
-    console.log(`\n📂 Emplacement: ${recorder.getSessionDir()}`);
-    console.log('\n📄 Fichiers générés:');
-    console.log('   - session.json    (données brutes)');
-    console.log('   - REPORT.md       (rapport avec timeline)');
-    console.log('   - screenshots/    (tous les screenshots)');
-    console.log('\n💡 Ouvre REPORT.md pour voir le rapport complet!\n');
+    console.log('\n✅ Session terminée!');
+    console.log(`📂 ${recorder.getSessionDir()}`);
+    console.log('\n🔥 Cette fois c\'est BRAVE! Pas Firefox! 🔥\n');
 
   } catch (error) {
     console.error('\n❌ Erreur:', error.message);
