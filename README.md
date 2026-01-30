@@ -1,113 +1,162 @@
 # OSbot
 
-Vision-based desktop automation engine. Control any application via screenshot + AI vision, without relying on APIs or UI Automation frameworks.
+> Vision-based desktop automation CLI and MCP server. Control any application via screenshot + AI vision, without APIs or UI Automation.
 
-## Installation
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 
-### From source (recommended for now)
+**OSbot** is a universal fallback for desktop automation when APIs and accessibility frameworks don't work. It uses AI vision (Claude) to understand what's on screen and native OS controls to interact with it.
 
-```bash
-# Clone the repository
-git clone https://github.com/mikealkeal/osbot.git
-cd osbot
+## Features
 
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Run CLI (development)
-npx tsx bin/osbot.ts --help
-
-# Or link globally
-npm link
-osbot --help
-```
-
-### Requirements
-
-- **Node.js 22+**
-- **Claude Max or Pro subscription** - Uses your existing subscription via OAuth (no API costs!)
-
-#### Windows
-
-- PowerShell (included with Windows)
-- No additional dependencies needed
-
-#### macOS
-
-- Grant accessibility permissions: System Preferences > Security & Privacy > Accessibility
-
-#### Linux
-
-- Install `scrot` or `imagemagick` for screenshots: `sudo apt install scrot`
+- 🎯 **Vision-based** - Locate UI elements by description using Claude vision
+- 🖱️ **Cross-platform** - Windows, macOS, and Linux support
+- 🔧 **CLI + MCP** - Use standalone or integrate with AI agents
+- 🔐 **OAuth Support** - Uses your Claude Max/Pro subscription (no API costs!)
+- ⚡ **Native Input** - Uses robotjs for reliable mouse/keyboard control
+- 📸 **Multi-monitor** - Supports multiple screens with DPI awareness
 
 ## Quick Start
 
 ```bash
-# 1. Initialize config
+# Install from source
+git clone https://github.com/mikealkeal/osbot.git
+cd osbot
+npm install
+npm run build
+npm link
+
+# Initialize and login
 osbot init
-
-# 2. Login with your Claude account (opens browser)
 osbot login
-# This uses OAuth - your Claude Max/Pro subscription, no API costs!
 
-# 3. Test screenshot
-osbot screenshot --list          # List available screens
-osbot screenshot -o test.png     # Capture screen
-
-# 4. Test with vision
+# Try it out
 osbot screenshot --describe      # Describe what's on screen
-osbot click "the Start button"   # Click via vision
 osbot type "hello world"         # Type text
-
-# Other login commands
-osbot login --status             # Check if logged in
-osbot login --logout             # Log out
+osbot hotkey "ctrl+a"           # Press keyboard shortcut
 ```
 
-## CLI Commands
+## Installation
 
-| Command | Description |
-|---------|-------------|
-| `osbot init` | Initialize configuration |
-| `osbot login` | Authenticate with Claude (OAuth) |
-| `osbot click <target>` | Click element by description |
-| `osbot type <text>` | Type text |
-| `osbot screenshot` | Capture screen |
-| `osbot windows` | List open windows |
-| `osbot focus <window>` | Focus a window |
-| `osbot serve` | Start MCP server |
+### Requirements
 
-### Options
+- **Node.js 22+** (22.0.0 or higher)
+- **Claude Max or Pro subscription** (for OAuth authentication)
+
+### From Source (Recommended)
 
 ```bash
-osbot click "button" --dry-run    # Show what would happen
-osbot click "button" --screen 1   # Use second monitor
-osbot click "button" --verbose    # Detailed output
-osbot screenshot --list           # List available screens
-osbot screenshot --describe       # Describe screen content
+git clone https://github.com/mikealkeal/osbot.git
+cd osbot
+npm install
+npm run build
+npm link
 ```
 
-## MCP Server
+### Platform-Specific Setup
 
-OSbot exposes tools via Model Context Protocol for AI agents.
+#### Windows
 
-Add to your MCP config (e.g., Claude Desktop):
+- PowerShell (included)
+- No additional dependencies needed
 
-```json
-{
-  "mcpServers": {
-    "osbot": {
-      "command": "npx",
-      "args": ["tsx", "/path/to/osbot/bin/osbot.ts", "serve"]
-    }
-  }
-}
+#### macOS
+
+- Grant accessibility permissions: **System Preferences > Security & Privacy > Accessibility**
+- Add Terminal or your shell to the allowed apps
+
+#### Linux
+
+```bash
+# Install screenshot tool (choose one)
+sudo apt install scrot           # Option 1: scrot
+sudo apt install imagemagick     # Option 2: ImageMagick
+
+# Install window manager control (optional, for focus/list windows)
+sudo apt install wmctrl
 ```
 
-Or if installed globally:
+## Usage
+
+### CLI Commands
+
+#### Authentication
+
+```bash
+osbot init                    # Initialize config directory
+osbot login                   # Login with Claude (opens browser)
+osbot login --status          # Check login status
+osbot login --logout          # Logout
+osbot login --key sk-ant-xxx  # Use API key instead of OAuth
+```
+
+#### Input & Automation
+
+```bash
+osbot type "hello world"              # Type text
+osbot hotkey "ctrl+c"                 # Press keyboard shortcut
+osbot hotkey "ctrl+shift+esc"         # Multiple modifiers
+```
+
+#### Screenshots
+
+```bash
+osbot screenshot                      # Capture primary screen
+osbot screenshot -o capture.png       # Save to file
+osbot screenshot --screen 1           # Capture second monitor
+osbot screenshot --list               # List available screens
+osbot screenshot --describe           # Describe screen content with AI
+```
+
+#### Window Management
+
+```bash
+osbot windows                         # List open windows
+osbot focus "Chrome"                  # Focus window by name
+osbot focus "Calculator"              # Works with partial matches
+```
+
+#### MCP Server
+
+```bash
+osbot serve                          # Start MCP server (stdio transport)
+```
+
+### Global Options
+
+```bash
+--verbose, -v          # Detailed output
+--dry-run              # Simulate without executing
+--quiet, -q            # Minimal output
+--screen N             # Target specific screen (default: 0)
+```
+
+### Examples
+
+```bash
+# Take screenshot and save
+osbot screenshot -o desktop.png
+
+# Type with delay between keystrokes
+osbot type "slow typing" --delay 100
+
+# Use second monitor
+osbot screenshot --screen 1 --describe
+
+# Dry run to see what would happen
+osbot type "test" --dry-run
+```
+
+## MCP Integration
+
+OSbot exposes tools via [Model Context Protocol](https://modelcontextprotocol.io) for AI agents like Claude Desktop.
+
+### Configuration
+
+Add to your MCP config file:
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
@@ -120,104 +169,296 @@ Or if installed globally:
 }
 ```
 
-### Available Tools
+Or if using from source:
 
-| Tool | Description |
-|------|-------------|
-| `os_click` | Click on element via vision |
-| `os_type` | Type text |
-| `os_screenshot` | Capture and optionally describe screen |
-| `os_windows` | List open windows |
-| `os_focus` | Focus window by name |
-| `os_scroll` | Scroll in direction |
-| `os_hotkey` | Press keyboard shortcut (e.g., "ctrl+c") |
+```json
+{
+  "mcpServers": {
+    "osbot": {
+      "command": "npx",
+      "args": ["tsx", "/absolute/path/to/osbot/bin/osbot.ts", "serve"]
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+| Tool            | Description             | Parameters              |
+| --------------- | ----------------------- | ----------------------- |
+| `os_move`       | Move mouse cursor       | `x`, `y`                |
+| `os_click`      | Click at coordinates    | `x`, `y`, `window?`     |
+| `os_type`       | Type text               | `text`                  |
+| `os_hotkey`     | Press keyboard shortcut | `keys` (e.g., "ctrl+c") |
+| `os_screenshot` | Capture screenshot      | `screen?` (default: 0)  |
+| `os_windows`    | List open windows       | -                       |
+| `os_focus`      | Focus window            | `window`                |
+| `os_scroll`     | Scroll in direction     | `direction`, `amount?`  |
+
+### MCP Usage Example
+
+Once configured, you can ask Claude Desktop:
+
+> "Take a screenshot and describe what's on screen"
+
+> "Click at coordinates (100, 200)"
+
+> "Type 'hello world' and press enter"
 
 ## Configuration
 
 Config directory: `~/.osbot/`
 
-- `config.json` - General settings
-- `oauth-token.json` - OAuth credentials (auto-managed)
+### Files
+
+- **`config.json`** - Application settings
+- **`oauth-token.json`** - OAuth credentials (managed automatically)
+
+### config.json
 
 ```json
 {
   "defaultScreen": 0,
   "dryRun": false,
-  "logLevel": "info"
+  "logLevel": "info",
+  "cursorSize": 128,
+  "model": "claude-sonnet-4-20250514",
+  "maxTokensLocate": 256,
+  "maxTokensDescribe": 1024,
+  "redirectPort": 9876
 }
 ```
 
-Authentication is handled via OAuth (`osbot login`), which uses your Claude Max/Pro subscription.
+### Configuration Options
 
-## Development
+| Option              | Type    | Default                      | Description                                 |
+| ------------------- | ------- | ---------------------------- | ------------------------------------------- |
+| `defaultScreen`     | number  | `0`                          | Default monitor to capture                  |
+| `dryRun`            | boolean | `false`                      | Simulate actions without executing          |
+| `logLevel`          | string  | `"info"`                     | Log level: `debug`, `info`, `warn`, `error` |
+| `cursorSize`        | number  | `128`                        | Cursor size in screenshots (32-256)         |
+| `model`             | string  | `"claude-sonnet-4-20250514"` | Claude model to use                         |
+| `maxTokensLocate`   | number  | `256`                        | Max tokens for element location             |
+| `maxTokensDescribe` | number  | `1024`                       | Max tokens for screen description           |
+| `redirectPort`      | number  | `9876`                       | OAuth redirect port                         |
+
+### Environment Variables
+
+You can also use environment variables (`.env` file supported):
 
 ```bash
-# Install dependencies
-npm install
+# Option 1: Claude OAuth token (recommended)
+CLAUDE_CODE_OAUTH_TOKEN=your-token-here
 
-# Development mode (watch)
-npm run dev
+# Option 2: Anthropic API key
+ANTHROPIC_API_KEY=sk-ant-...
 
-# Build TypeScript
-npm run build
-
-# Type check only
-npm run typecheck
-
-# Lint
-npm run lint
-
-# Format code
-npm run format
-```
-
-### Project Structure
-
-```text
-osbot/
-├── bin/osbot.ts              # CLI entry point
-├── src/
-│   ├── core/
-│   │   ├── screenshot.ts     # Screen capture (PowerShell/screencapture/scrot)
-│   │   ├── vision.ts         # Claude API integration
-│   │   ├── input.ts          # Mouse/keyboard control (nut.js)
-│   │   └── windows.ts        # Window management
-│   ├── cli/commands/         # CLI command handlers
-│   ├── mcp/server.ts         # MCP server implementation
-│   └── config/index.ts       # Config management
-├── package.json
-└── tsconfig.json
+# Other settings
+LOG_LEVEL=info
+DRY_RUN=false
 ```
 
 ## How It Works
 
-1. **Screenshot** - Captures the screen using native OS tools
-2. **Vision** - Claude analyzes the image to find UI elements by description
-3. **Input** - nut.js controls mouse/keyboard to interact with the element
+OSbot uses a three-layer approach for universal desktop automation:
 
-This approach works with any application, regardless of its technology stack or accessibility support.
+1. **Screenshot Layer** - Captures screen using native OS tools:
+   - Windows: PowerShell + .NET System.Drawing
+   - macOS: `screencapture` command
+   - Linux: `scrot` or ImageMagick `import`
+
+2. **Vision Layer** - Claude analyzes screenshots to:
+   - Locate UI elements by natural language description
+   - Describe screen content
+   - Provide coordinates for interaction
+
+3. **Input Layer** - Uses robotjs for:
+   - Mouse movement and clicks
+   - Keyboard input and hotkeys
+   - Cross-platform native control
+   - Adapts to Windows mouse button swap settings
+
+This approach works with **any application**, regardless of technology stack, accessibility support, or API availability.
+
+## Development
+
+### Setup
+
+```bash
+git clone https://github.com/mikealkeal/osbot.git
+cd osbot
+npm install
+```
+
+### Scripts
+
+```bash
+npm run build       # Build TypeScript
+npm run dev         # Development mode (watch)
+npm run typecheck   # Type check only
+npm run lint        # Run ESLint
+npm run lint:fix    # Fix linting issues
+npm run format      # Format with Prettier
+npm run clean       # Remove dist folder
+```
+
+### Project Structure
+
+```
+osbot/
+├── bin/
+│   └── osbot.ts              # CLI entry point
+├── src/
+│   ├── core/
+│   │   ├── screenshot.ts     # Multi-platform screen capture
+│   │   ├── auth.ts           # OAuth 2.0 + PKCE authentication
+│   │   ├── vision.ts         # Claude API integration
+│   │   ├── input.ts          # Mouse/keyboard control (robotjs)
+│   │   └── windows.ts        # Window management
+│   ├── cli/
+│   │   ├── commands/         # CLI command implementations
+│   │   └── index.ts          # Command registration
+│   ├── mcp/
+│   │   └── server.ts         # MCP server implementation
+│   ├── config/
+│   │   └── index.ts          # Config management with Zod
+│   └── index.ts              # Main exports
+├── package.json
+├── tsconfig.json
+├── .env.example
+└── LICENSE
+```
+
+### Tech Stack
+
+- **Runtime**: Node.js 22+ (ESM)
+- **Language**: TypeScript 5.7+ (strict mode)
+- **Validation**: Zod
+- **CLI**: Commander + Chalk + Ora
+- **Vision**: Anthropic SDK (Claude Sonnet 4)
+- **Input**: robotjs (native automation)
+- **Screenshot**: screenshot-desktop + platform-specific tools
+- **MCP**: @modelcontextprotocol/sdk
 
 ## Troubleshooting
 
-### Windows: Screenshot not working
+### Windows Issues
 
-- Ensure PowerShell is available (it should be by default)
-- Try running as administrator if permissions are an issue
+**Screenshot not capturing cursor:**
 
-### macOS: Input not working
+- Adjust `cursorSize` in config.json (32-256)
+- Larger cursors are easier for AI to detect
 
-- Grant accessibility permissions in System Preferences
+**Clicks not working:**
 
-### Linux: Screenshot not working
+- OSbot auto-detects swapped mouse buttons
+- No manual configuration needed
 
-- Install scrot: `sudo apt install scrot`
-- Or imagemagick: `sudo apt install imagemagick`
+### macOS Issues
 
-### API errors
+**"Accessibility permissions required":**
 
-- Verify your API key is correct
-- Check your Anthropic account has credits
+1. Open System Preferences > Security & Privacy > Accessibility
+2. Add Terminal or your shell to the list
+3. Restart the terminal
+
+**Screenshot not working:**
+
+- `screencapture` is built-in, should work out of the box
+- Check privacy settings if denied
+
+### Linux Issues
+
+**Screenshot fails:**
+
+```bash
+# Install one of these
+sudo apt install scrot           # Recommended
+sudo apt install imagemagick
+```
+
+**Window focus/list not working:**
+
+```bash
+sudo apt install wmctrl
+```
+
+### Authentication Issues
+
+**OAuth flow times out:**
+
+- Check firewall isn't blocking port 9876
+- Change port in `~/.osbot/config.json` if needed
+- Try `osbot login --key sk-ant-xxx` as fallback
+
+**"Not authenticated" errors:**
+
+```bash
+osbot login --status    # Check status
+osbot login --logout    # Clear credentials
+osbot login             # Re-authenticate
+```
+
+### Vision/API Issues
+
+**"Element not found":**
+
+- Be more specific in descriptions
+- Try `osbot screenshot --describe` to see what Claude sees
+- Ensure element is visible on screen
+
+**Rate limiting:**
+
+- Wait a few moments between requests
+- Consider using API key for higher limits
 
 ## License
 
-BSL 1.1 - Free for personal and open-source use. Commercial use requires a license.
+**BSL 1.1** (Business Source License 1.1)
+
+- ✅ **Free** for personal use
+- ✅ **Free** for open-source projects
+- ⚠️ **Commercial use** requires a license after 4 years
+- 🔄 Automatically converts to **MIT** after 4 years (2029-01-30)
+
+See [LICENSE](LICENSE) for full terms.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Guidelines
+
+1. Follow the existing code style (ESLint + Prettier configured)
+2. Add tests for new features
+3. Update documentation as needed
+4. Ensure `npm run build` succeeds
+5. Check types with `npm run typecheck`
+
+### Areas for Contribution
+
+- [ ] Additional platform support (BSD, other Unix variants)
+- [ ] More sophisticated element location strategies
+- [ ] Performance optimizations
+- [ ] Additional MCP tools
+- [ ] Better error messages
+- [ ] Documentation improvements
+
+## Support
+
+- 🐛 **Bug reports**: [GitHub Issues](https://github.com/mikealkeal/osbot/issues)
+- 💬 **Questions**: [GitHub Discussions](https://github.com/mikealkeal/osbot/discussions)
+- 📖 **Documentation**: This README + inline code comments
+
+## Roadmap
+
+- [ ] npm package distribution
+- [ ] Web interface for remote control
+- [ ] Recording and playback of automation sequences
+- [ ] Multi-provider vision support (GPT-4V, Gemini)
+- [ ] Plugin system for custom tools
+- [ ] Docker container distribution
+
+---
+
+**Built with [Claude](https://claude.ai) • Powered by [robotjs](https://github.com/octalmage/robotjs) • MCP-enabled**
