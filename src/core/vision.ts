@@ -1,10 +1,12 @@
 /**
  * Vision module - Claude API integration
+ * Supports OAuth (Claude Max/Pro) and API key authentication
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { getApiKey } from '../config/index.js';
+import { getAccessToken, isLoggedIn } from './auth.js';
 
 const CoordinatesSchema = z.object({
   x: z.number(),
@@ -21,15 +23,31 @@ export interface LocateOptions {
 
 let client: Anthropic | null = null;
 
-function getClient(): Anthropic {
-  if (!client) {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      throw new Error('No API key configured. Run "osbot login" or set ANTHROPIC_API_KEY.');
-    }
-    client = new Anthropic({ apiKey });
+async function getClient(): Promise<Anthropic> {
+  if (client) {
+    return client;
   }
-  return client;
+
+  // Priority: OAuth token > API key > Environment variable
+  if (isLoggedIn()) {
+    try {
+      const accessToken = await getAccessToken();
+      client = new Anthropic({
+        apiKey: accessToken, // OAuth token works as API key
+      });
+      return client;
+    } catch {
+      // OAuth failed, try API key
+    }
+  }
+
+  const apiKey = getApiKey();
+  if (apiKey) {
+    client = new Anthropic({ apiKey });
+    return client;
+  }
+
+  throw new Error('Not authenticated. Run "osbot login" to authenticate with your Claude account.');
 }
 
 export async function locateElement(
@@ -51,7 +69,7 @@ If the element is not found, return {"x": -1, "y": -1, "confidence": 0}`;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const anthropic = getClient();
+      const anthropic = await getClient();
 
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
@@ -96,6 +114,11 @@ If the element is not found, return {"x": -1, "y": -1, "confidence": 0}`;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
+      // Reset client on auth errors to retry with fresh token
+      if (lastError.message.includes('401') || lastError.message.includes('auth')) {
+        client = null;
+      }
+
       if (attempt < retries - 1) {
         await sleep(retryDelay);
       }
@@ -106,7 +129,7 @@ If the element is not found, return {"x": -1, "y": -1, "confidence": 0}`;
 }
 
 export async function describeScreen(screenshotBase64: string): Promise<string> {
-  const anthropic = getClient();
+  const anthropic = await getClient();
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',

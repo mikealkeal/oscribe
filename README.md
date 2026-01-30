@@ -28,7 +28,7 @@ osbot --help
 ### Requirements
 
 - **Node.js 22+**
-- **Anthropic API key** (Claude) - Get one at <https://console.anthropic.com/>
+- **Claude Max or Pro subscription** - Uses your existing subscription via OAuth (no API costs!)
 
 #### Windows
 
@@ -49,18 +49,22 @@ osbot --help
 # 1. Initialize config
 osbot init
 
-# 2. Configure API key
-osbot login --key sk-ant-your-key
-# Or set environment variable: export ANTHROPIC_API_KEY=sk-ant-...
+# 2. Login with your Claude account (opens browser)
+osbot login
+# This uses OAuth - your Claude Max/Pro subscription, no API costs!
 
 # 3. Test screenshot
 osbot screenshot --list          # List available screens
 osbot screenshot -o test.png     # Capture screen
 
-# 4. Test with vision (requires API key)
+# 4. Test with vision
 osbot screenshot --describe      # Describe what's on screen
 osbot click "the Start button"   # Click via vision
 osbot type "hello world"         # Type text
+
+# Other login commands
+osbot login --status             # Check if logged in
+osbot login --logout             # Log out
 ```
 
 ## CLI Commands
@@ -68,7 +72,7 @@ osbot type "hello world"         # Type text
 | Command | Description |
 |---------|-------------|
 | `osbot init` | Initialize configuration |
-| `osbot login` | Configure Anthropic API key |
+| `osbot login` | Authenticate with Claude (OAuth) |
 | `osbot click <target>` | Click element by description |
 | `osbot type <text>` | Type text |
 | `osbot screenshot` | Capture screen |
@@ -130,20 +134,20 @@ Or if installed globally:
 
 ## Configuration
 
-Config file: `~/.osbot/config.json`
+Config directory: `~/.osbot/`
+
+- `config.json` - General settings
+- `oauth-token.json` - OAuth credentials (auto-managed)
 
 ```json
 {
-  "apiKey": "sk-ant-...",
   "defaultScreen": 0,
   "dryRun": false,
   "logLevel": "info"
 }
 ```
 
-Environment variables:
-
-- `ANTHROPIC_API_KEY` - API key (alternative to config file)
+Authentication is handled via OAuth (`osbot login`), which uses your Claude Max/Pro subscription.
 
 ## Development
 

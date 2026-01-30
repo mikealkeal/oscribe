@@ -10,6 +10,9 @@ dist/
 .env.local
 .env.*.local
 
+# OAuth tokens (sensitive!)
+oauth-token.json
+
 # IDE
 .idea/
 .vscode/
@@ -45,5 +48,8 @@ temp/
 *.gif
 *.bmp
 
-# Claude agents (keep in repo)
-# .agents/
+# Skills directories (reinstall with npx skills add)
+.agents/
+.claude/skills/
+.codex/
+.continue/
