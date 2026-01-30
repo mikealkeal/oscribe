@@ -49,6 +49,15 @@ temp/
 
 # Skills directories (reinstall with npx skills add)
 .agents/
-.claude/skills/
+.claude/
 .codex/
 .continue/
+
+# MCP config (local development)
+.mcp.json
+
+# Development notes
+OSbot-points-a-revoir.md
+
+# Windows temp files
+nul
