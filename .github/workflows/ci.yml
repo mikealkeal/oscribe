@@ -20,6 +20,12 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxtst-dev libpng++-dev
+
       - name: Install dependencies
         run: npm ci
 
@@ -47,6 +53,12 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
+
+      - name: Install robotjs dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxtst-dev libpng++-dev
 
       - name: Install dependencies
         run: npm ci
