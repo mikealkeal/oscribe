@@ -201,7 +201,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'os_inspect',
-        description: 'Get UI elements from Windows UI Automation (accessibility tree). Returns structured data about all interactive elements: buttons, text fields, menus, etc. with their exact coordinates. Like a DOM for desktop apps. Use this to find elements precisely before clicking.',
+        description: 'Get UI elements from the FOCUSED WINDOW using Windows UI Automation. Returns structured data about interactive elements (buttons, text fields, menus, etc.) with SCREEN coordinates (absolute, not window-relative). Like a DOM for desktop apps. If a modal/dialog is open, it returns the modal elements, not the parent window.',
         inputSchema: {
           type: 'object',
           properties: {
