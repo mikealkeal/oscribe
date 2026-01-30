@@ -6,10 +6,7 @@
 import 'dotenv/config';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -21,7 +18,11 @@ import { listWindows, focusWindow } from '../core/windows.js';
 
 // Get version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8')) as { version: string };
+const packageJson = JSON.parse(
+  readFileSync(join(__dirname, '../../../package.json'), 'utf-8')
+) as {
+  version: string;
+};
 
 const server = new Server(
   {
