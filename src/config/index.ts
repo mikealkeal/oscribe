@@ -15,6 +15,13 @@ export const ConfigSchema = z.object({
   defaultScreen: z.number().default(0),
   dryRun: z.boolean().default(false),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  cursorSize: z.number().min(32).max(256).default(128),
+  // Vision settings
+  model: z.string().default('claude-sonnet-4-20250514'),
+  maxTokensLocate: z.number().default(256),
+  maxTokensDescribe: z.number().default(1024),
+  // OAuth settings
+  redirectPort: z.number().default(9876),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -23,6 +30,11 @@ const DEFAULT_CONFIG: Config = {
   defaultScreen: 0,
   dryRun: false,
   logLevel: 'info',
+  cursorSize: 128,
+  model: 'claude-sonnet-4-20250514',
+  maxTokensLocate: 256,
+  maxTokensDescribe: 1024,
+  redirectPort: 9876,
 };
 
 export function getConfigDir(): string {

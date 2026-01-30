@@ -1,12 +1,13 @@
 /**
  * Vision module - Claude API integration
- * Supports OAuth (Claude Max/Pro) and API key authentication
+ * Supports:
+ * - CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`)
+ * - API key (ANTHROPIC_API_KEY or config)
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { getApiKey } from '../config/index.js';
-import { getAccessToken, isLoggedIn } from './auth.js';
+import { getApiKey, loadConfig } from '../config/index.js';
 
 const CoordinatesSchema = z.object({
   x: z.number(),
@@ -23,22 +24,16 @@ export interface LocateOptions {
 
 let client: Anthropic | null = null;
 
-async function getClient(): Promise<Anthropic> {
+function getClient(): Anthropic {
   if (client) {
     return client;
   }
 
-  // Priority: OAuth token > API key > Environment variable
-  if (isLoggedIn()) {
-    try {
-      const accessToken = await getAccessToken();
-      client = new Anthropic({
-        apiKey: accessToken, // OAuth token works as API key
-      });
-      return client;
-    } catch {
-      // OAuth failed, try API key
-    }
+  // Priority: CLAUDE_CODE_OAUTH_TOKEN > API key > ANTHROPIC_API_KEY
+  const oauthToken = process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+  if (oauthToken) {
+    client = new Anthropic({ apiKey: oauthToken });
+    return client;
   }
 
   const apiKey = getApiKey();
@@ -47,7 +42,11 @@ async function getClient(): Promise<Anthropic> {
     return client;
   }
 
-  throw new Error('Not authenticated. Run "osbot login" to authenticate with your Claude account.');
+  throw new Error(
+    'Not authenticated. Options:\n' +
+    '  1. Run "claude setup-token" and set CLAUDE_CODE_OAUTH_TOKEN\n' +
+    '  2. Run "osbot login --key sk-ant-xxx" with your API key'
+  );
 }
 
 export async function locateElement(
@@ -69,11 +68,12 @@ If the element is not found, return {"x": -1, "y": -1, "confidence": 0}`;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const anthropic = await getClient();
+      const anthropic = getClient();
+      const config = loadConfig();
 
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 256,
+        model: config.model,
+        max_tokens: config.maxTokensLocate,
         messages: [
           {
             role: 'user',
@@ -129,11 +129,12 @@ If the element is not found, return {"x": -1, "y": -1, "confidence": 0}`;
 }
 
 export async function describeScreen(screenshotBase64: string): Promise<string> {
-  const anthropic = await getClient();
+  const anthropic = getClient();
+  const config = loadConfig();
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
+    model: config.model,
+    max_tokens: config.maxTokensDescribe,
     messages: [
       {
         role: 'user',

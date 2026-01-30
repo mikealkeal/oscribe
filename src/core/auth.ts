@@ -6,15 +6,13 @@
 import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { exec } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { getConfigDir, ensureConfigDir } from '../config/index.js';
+import { getConfigDir, ensureConfigDir, loadConfig } from '../config/index.js';
 
 const ANTHROPIC_AUTH_URL = 'https://console.anthropic.com/oauth/authorize';
 const ANTHROPIC_TOKEN_URL = 'https://console.anthropic.com/oauth/token';
 const CLIENT_ID = 'osbot-cli';
-const REDIRECT_PORT = 9876;
-const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/callback`;
 
 interface TokenData {
   access_token: string;
@@ -65,13 +63,17 @@ function openBrowser(url: string): void {
 export async function login(): Promise<TokenData> {
   ensureConfigDir();
 
+  const config = loadConfig();
+  const redirectPort = config.redirectPort;
+  const redirectUri = `http://localhost:${redirectPort}/callback`;
+
   const { verifier, challenge } = generatePKCE();
   const state = randomBytes(16).toString('hex');
 
   // Build authorization URL
   const authUrl = new URL(ANTHROPIC_AUTH_URL);
   authUrl.searchParams.set('client_id', CLIENT_ID);
-  authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('code_challenge', challenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
@@ -81,7 +83,7 @@ export async function login(): Promise<TokenData> {
   return new Promise((resolve, reject) => {
     // Start local server to receive callback
     const server = createServer(async (req, res) => {
-      const url = new URL(req.url ?? '/', `http://localhost:${REDIRECT_PORT}`);
+      const url = new URL(req.url ?? '/', `http://localhost:${redirectPort}`);
 
       if (url.pathname === '/callback') {
         const code = url.searchParams.get('code');
@@ -123,7 +125,7 @@ export async function login(): Promise<TokenData> {
               grant_type: 'authorization_code',
               client_id: CLIENT_ID,
               code,
-              redirect_uri: REDIRECT_URI,
+              redirect_uri: redirectUri,
               code_verifier: verifier,
             }),
           });
@@ -170,7 +172,7 @@ export async function login(): Promise<TokenData> {
       }
     });
 
-    server.listen(REDIRECT_PORT, () => {
+    server.listen(redirectPort, () => {
       console.log(`Opening browser for authentication...`);
       console.log(`If browser doesn't open, visit: ${authUrl.toString()}`);
       openBrowser(authUrl.toString());
@@ -294,7 +296,6 @@ export function isLoggedIn(): boolean {
 export function logout(): void {
   const tokenPath = getTokenPath();
   if (existsSync(tokenPath)) {
-    const { unlinkSync } = require('node:fs');
     unlinkSync(tokenPath);
   }
 }

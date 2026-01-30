@@ -3,6 +3,7 @@
  * Exposes desktop automation tools via Model Context Protocol
  */
 
+import 'dotenv/config';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -10,16 +11,22 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { captureScreen, listScreens } from '../core/screenshot.js';
-import { locateElement, describeScreen } from '../core/vision.js';
-import { click, typeText, hotkey, scroll } from '../core/input.js';
+import { click, typeText, hotkey, scroll, moveMouse } from '../core/input.js';
 import { listWindows, focusWindow } from '../core/windows.js';
+
+// Get version from package.json
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8')) as { version: string };
 
 const server = new Server(
   {
     name: 'osbot',
-    version: '0.1.0',
+    version: packageJson.version,
   },
   {
     capabilities: {
@@ -29,10 +36,15 @@ const server = new Server(
 );
 
 // Tool schemas
+const MoveSchema = z.object({
+  x: z.number().describe('X coordinate to move mouse to'),
+  y: z.number().describe('Y coordinate to move mouse to'),
+});
+
 const ClickSchema = z.object({
-  target: z.string().describe('Description of the element to click'),
-  window: z.string().optional().describe('Window to focus first'),
-  screen: z.number().default(0).describe('Screen number'),
+  x: z.number().describe('X coordinate to click'),
+  y: z.number().describe('Y coordinate to click'),
+  window: z.string().optional().describe('Window to focus first (optional)'),
 });
 
 const TypeSchema = z.object({
@@ -40,9 +52,7 @@ const TypeSchema = z.object({
 });
 
 const ScreenshotSchema = z.object({
-  window: z.string().optional().describe('Window to capture'),
-  screen: z.number().default(0).describe('Screen number'),
-  describe: z.boolean().default(false).describe('Describe screen content'),
+  screen: z.number().default(0).describe('Screen number (default: 0)'),
 });
 
 const ScrollSchema = z.object({
@@ -63,16 +73,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: 'os_click',
-        description: 'Click on an element identified by description using vision',
+        name: 'os_move',
+        description: 'Move mouse cursor to specific coordinates',
         inputSchema: {
           type: 'object',
           properties: {
-            target: { type: 'string', description: 'Description of the element to click' },
-            window: { type: 'string', description: 'Window to focus first (optional)' },
-            screen: { type: 'number', description: 'Screen number (default: 0)' },
+            x: { type: 'number', description: 'X coordinate to move to' },
+            y: { type: 'number', description: 'Y coordinate to move to' },
           },
-          required: ['target'],
+          required: ['x', 'y'],
+        },
+      },
+      {
+        name: 'os_click',
+        description: 'Click at specific screen coordinates',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            x: { type: 'number', description: 'X coordinate to click' },
+            y: { type: 'number', description: 'Y coordinate to click' },
+            window: { type: 'string', description: 'Window to focus first (optional)' },
+          },
+          required: ['x', 'y'],
         },
       },
       {
@@ -88,12 +110,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'os_screenshot',
-        description: 'Capture a screenshot and optionally describe its content',
+        description: 'Capture a screenshot',
         inputSchema: {
           type: 'object',
           properties: {
             screen: { type: 'number', description: 'Screen number (default: 0)' },
-            describe: { type: 'boolean', description: 'Describe screen content (default: false)' },
           },
         },
       },
@@ -149,22 +170,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case 'os_click': {
-        const { target, window: windowName, screen } = ClickSchema.parse(args);
-
-        if (windowName) {
-          await focusWindow(windowName);
-        }
-
-        const screenshot = await captureScreen({ screen });
-        const coords = await locateElement(target, screenshot.base64);
-        await click(coords.x, coords.y);
+      case 'os_move': {
+        const { x, y } = MoveSchema.parse(args);
+        await moveMouse(x, y);
 
         return {
           content: [
             {
               type: 'text',
-              text: `Clicked on "${target}" at (${coords.x}, ${coords.y})`,
+              text: `Moved mouse to (${x}, ${y})`,
+            },
+          ],
+        };
+      }
+
+      case 'os_click': {
+        const { x, y, window: windowName } = ClickSchema.parse(args);
+
+        if (windowName) {
+          await focusWindow(windowName);
+        }
+
+        await click(x, y);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Clicked at (${x}, ${y})`,
             },
           ],
         };
@@ -185,21 +218,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'os_screenshot': {
-        const { screen, describe } = ScreenshotSchema.parse(args);
+        const { screen } = ScreenshotSchema.parse(args);
         const screenshot = await captureScreen({ screen });
 
-        if (describe) {
-          const description = await describeScreen(screenshot.base64);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: description,
-              },
-            ],
-          };
-        }
-
+        // Always return raw image - let MCP client (Claude Code) analyze it
         return {
           content: [
             {

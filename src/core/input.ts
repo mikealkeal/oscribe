@@ -2,7 +2,33 @@
  * Input module - Mouse and keyboard control
  */
 
-import { mouse, keyboard, Point, Key, Button } from '@nut-tree-fork/nut-js';
+import robot from 'robotjs';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
+
+// Detect if Windows has swapped mouse buttons
+let mouseButtonsSwapped = false;
+
+async function detectSwappedMouseButtons(): Promise<void> {
+  if (process.platform === 'win32') {
+    try {
+      const { stdout } = await execAsync(
+        `powershell -Command "Get-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' | Select-Object -ExpandProperty SwapMouseButtons"`
+      );
+      mouseButtonsSwapped = stdout.trim() === '1';
+      if (mouseButtonsSwapped) {
+        console.error('[OSBot] Detected swapped mouse buttons in Windows - adapting clicks');
+      }
+    } catch {
+      mouseButtonsSwapped = false;
+    }
+  }
+}
+
+// Call on module load
+detectSwappedMouseButtons();
 
 export interface ClickOptions {
   button?: 'left' | 'right' | 'middle';
@@ -15,6 +41,17 @@ export interface TypeOptions {
   dryRun?: boolean;
 }
 
+export async function moveMouse(x: number, y: number, options: { dryRun?: boolean } = {}): Promise<void> {
+  const { dryRun = false } = options;
+
+  if (dryRun) {
+    console.log(`[DRY RUN] Move mouse to (${x}, ${y})`);
+    return;
+  }
+
+  robot.moveMouse(x, y);
+}
+
 export async function click(x: number, y: number, options: ClickOptions = {}): Promise<void> {
   const { button = 'left', double = false, dryRun = false } = options;
 
@@ -23,15 +60,31 @@ export async function click(x: number, y: number, options: ClickOptions = {}): P
     return;
   }
 
-  const point = new Point(x, y);
-  await mouse.setPosition(point);
+  // Adapt to Windows swapped mouse buttons
+  let effectiveButton = button;
+  if (mouseButtonsSwapped && process.platform === 'win32') {
+    if (button === 'left') effectiveButton = 'right';
+    else if (button === 'right') effectiveButton = 'left';
+  }
 
-  const btn = button === 'right' ? Button.RIGHT : button === 'middle' ? Button.MIDDLE : Button.LEFT;
+  // Move to position
+  robot.moveMouse(x, y);
 
+  // Small delay to ensure position is set
+  await wait(50);
+
+  console.error(`[OSBot] Click ${button} (effective: ${effectiveButton}) at (${x}, ${y})`);
+
+  // Click
   if (double) {
-    await mouse.doubleClick(btn);
+    robot.mouseToggle('down', effectiveButton);
+    robot.mouseToggle('up', effectiveButton);
+    await wait(100);
+    robot.mouseToggle('down', effectiveButton);
+    robot.mouseToggle('up', effectiveButton);
   } else {
-    await mouse.click(btn);
+    robot.mouseToggle('down', effectiveButton);
+    robot.mouseToggle('up', effectiveButton);
   }
 }
 
@@ -43,11 +96,19 @@ export async function typeText(text: string, options: TypeOptions = {}): Promise
     return;
   }
 
+  console.error(`[OSBot] Typing text: "${text}"`);
+
   if (delay > 0) {
-    keyboard.config.autoDelayMs = delay;
+    robot.setKeyboardDelay(delay);
   }
 
-  await keyboard.type(text);
+  try {
+    robot.typeString(text);
+    console.error(`[OSBot] Typing complete`);
+  } catch (error) {
+    console.error(`[OSBot] Typing error:`, error);
+    throw error;
+  }
 }
 
 export async function hotkey(keys: string[], options: { dryRun?: boolean } = {}): Promise<void> {
@@ -58,41 +119,61 @@ export async function hotkey(keys: string[], options: { dryRun?: boolean } = {})
     return;
   }
 
-  const keyMap: Record<string, Key> = {
-    ctrl: Key.LeftControl,
-    control: Key.LeftControl,
-    alt: Key.LeftAlt,
-    shift: Key.LeftShift,
-    cmd: Key.LeftCmd,
-    command: Key.LeftCmd,
-    win: Key.LeftWin,
-    enter: Key.Enter,
-    return: Key.Enter,
-    tab: Key.Tab,
-    escape: Key.Escape,
-    esc: Key.Escape,
-    space: Key.Space,
-    backspace: Key.Backspace,
-    delete: Key.Delete,
-    up: Key.Up,
-    down: Key.Down,
-    left: Key.Left,
-    right: Key.Right,
+  console.error(`[OSBot] Hotkey: ${keys.join('+')}`);
+
+  // Use robotjs - native, reliable, works on all platforms
+  const keyMap: Record<string, string> = {
+    ctrl: 'control',
+    control: 'control',
+    alt: 'alt',
+    shift: 'shift',
+    cmd: 'command',
+    command: 'command',
+    win: 'command', // robotjs uses 'command' for Windows key
+    windows: 'command',
+    enter: 'enter',
+    return: 'enter',
+    tab: 'tab',
+    escape: 'escape',
+    esc: 'escape',
+    space: 'space',
+    backspace: 'backspace',
+    delete: 'delete',
+    up: 'up',
+    down: 'down',
+    left: 'left',
+    right: 'right',
+    home: 'home',
+    end: 'end',
+    pageup: 'pageup',
+    pagedown: 'pagedown',
   };
 
-  const mappedKeys = keys.map((k) => {
+  const modifiers: string[] = [];
+  let mainKey = '';
+
+  // Separate modifiers from main key
+  keys.forEach((k) => {
     const lower = k.toLowerCase();
-    if (keyMap[lower]) {
-      return keyMap[lower];
+    if (['ctrl', 'control', 'alt', 'shift', 'cmd', 'command', 'win', 'windows'].includes(lower)) {
+      const mapped = keyMap[lower];
+      if (mapped && !modifiers.includes(mapped)) {
+        modifiers.push(mapped);
+      }
+    } else {
+      mainKey = keyMap[lower] || k.toLowerCase();
     }
-    if (k.length === 1) {
-      return k.toUpperCase() as unknown as Key;
-    }
-    throw new Error(`Unknown key: ${k}`);
   });
 
-  await keyboard.pressKey(...mappedKeys);
-  await keyboard.releaseKey(...mappedKeys.reverse());
+  console.error(`[OSBot] Modifiers: ${modifiers.join('+')}, Main key: ${mainKey}`);
+
+  try {
+    robot.keyTap(mainKey, modifiers);
+    console.error(`[OSBot] Hotkey complete`);
+  } catch (error) {
+    console.error(`[OSBot] Hotkey error:`, error);
+    throw error;
+  }
 }
 
 export async function scroll(
@@ -107,15 +188,11 @@ export async function scroll(
     return;
   }
 
-  if (direction === 'up') {
-    await mouse.scrollUp(amount);
-  } else if (direction === 'down') {
-    await mouse.scrollDown(amount);
-  } else if (direction === 'left') {
-    await mouse.scrollLeft(amount);
-  } else {
-    await mouse.scrollRight(amount);
-  }
+  // robotjs scrollMouse(x, y) - positive y scrolls down, negative up
+  const x = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
+  const y = direction === 'down' ? amount : direction === 'up' ? -amount : 0;
+
+  robot.scrollMouse(x, y);
 }
 
 export function wait(ms: number): Promise<void> {
