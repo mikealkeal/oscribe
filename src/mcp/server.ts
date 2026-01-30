@@ -47,12 +47,14 @@ const ClickSchema = z.object({
   target: z.string().describe('Description of the element to click'),
   screen: z.number().default(0).describe('Screen number (default: 0)'),
   window: z.string().optional().describe('Window to focus first (optional)'),
+  button: z.enum(['left', 'right', 'middle']).default('left').describe('Mouse button to click'),
 });
 
 const ClickAtSchema = z.object({
   x: z.number().describe('X coordinate to click'),
   y: z.number().describe('Y coordinate to click'),
   window: z.string().optional().describe('Window to focus first (optional)'),
+  button: z.enum(['left', 'right', 'middle']).default('left').describe('Mouse button to click'),
 });
 
 const LocateSchema = z.object({
@@ -106,6 +108,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             target: { type: 'string', description: 'Description of the element to click (e.g., "Submit button", "File menu")' },
             screen: { type: 'number', description: 'Screen number (default: 0)' },
             window: { type: 'string', description: 'Window to focus first (optional)' },
+            button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)' },
           },
           required: ['target'],
         },
@@ -119,6 +122,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             x: { type: 'number', description: 'X coordinate to click' },
             y: { type: 'number', description: 'Y coordinate to click' },
             window: { type: 'string', description: 'Window to focus first (optional)' },
+            button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)' },
           },
           required: ['x', 'y'],
         },
@@ -223,7 +227,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'os_click': {
-        const { target, screen, window: windowName } = ClickSchema.parse(args);
+        const { target, screen, window: windowName, button } = ClickSchema.parse(args);
 
         if (windowName) {
           await focusWindow(windowName);
@@ -236,32 +240,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const coords = await locateElement(target, screenshot.base64);
 
         // Click at located coordinates
-        await click(coords.x, coords.y);
+        await click(coords.x, coords.y, { button });
 
         return {
           content: [
             {
               type: 'text',
-              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${((coords.confidence ?? 0) * 100).toFixed(0)}% confidence. Clicked successfully.`,
+              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${((coords.confidence ?? 0) * 100).toFixed(0)}% confidence. ${button === 'right' ? 'Right-clicked' : button === 'middle' ? 'Middle-clicked' : 'Clicked'} successfully.`,
             },
           ],
         };
       }
 
       case 'os_click_at': {
-        const { x, y, window: windowName } = ClickAtSchema.parse(args);
+        const { x, y, window: windowName, button } = ClickAtSchema.parse(args);
 
         if (windowName) {
           await focusWindow(windowName);
         }
 
-        await click(x, y);
+        await click(x, y, { button });
 
         return {
           content: [
             {
               type: 'text',
-              text: `Clicked at (${x}, ${y})`,
+              text: `${button === 'right' ? 'Right-clicked' : button === 'middle' ? 'Middle-clicked' : 'Clicked'} at (${x}, ${y})`,
             },
           ],
         };
