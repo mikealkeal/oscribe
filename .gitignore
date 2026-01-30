@@ -38,5 +38,12 @@ tmp/
 temp/
 *.tmp
 
+# Screenshots
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+
 # Claude agents (keep in repo)
 # .agents/
