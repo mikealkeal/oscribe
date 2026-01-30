@@ -35,87 +35,50 @@ export async function getUIElements(windowTitle?: string): Promise<UITree> {
   }
 
   // PowerShell script to query UI Automation
+  const windowFilter = windowTitle ? `"${windowTitle}"` : '""';
   const psScript = `
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-
-$root = [System.Windows.Automation.AutomationElement]::RootElement
-
-# Get focused window or find by title
-if ("${windowTitle || ''}") {
-    $condition = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::NameProperty,
-        "*${windowTitle}*"
-    )
-    $window = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $condition)
+Add-Type -AssemblyName UIAutomationClient;
+Add-Type -AssemblyName UIAutomationTypes;
+$root = [System.Windows.Automation.AutomationElement]::RootElement;
+$windowFilter = ${windowFilter};
+if ($windowFilter -ne "") {
+    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "*$windowFilter*");
+    $window = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $condition);
 } else {
-    $window = [System.Windows.Automation.AutomationElement]::FocusedElement
+    $window = [System.Windows.Automation.AutomationElement]::FocusedElement;
     while ($window.Current.ControlType -ne [System.Windows.Automation.ControlType]::Window -and $window -ne $root) {
-        $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-        $window = $walker.GetParent($window)
+        $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker;
+        $window = $walker.GetParent($window);
     }
 }
-
-if (-not $window -or $window -eq $root) {
-    Write-Output '{"error": "No window found"}'
-    exit
-}
-
-$windowName = $window.Current.Name
-$elements = @()
-
-# Get all interactive elements
-$condition = New-Object System.Windows.Automation.PropertyCondition(
-    [System.Windows.Automation.AutomationElement]::IsEnabledProperty, $true
-)
-
-$allElements = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
-
+if (-not $window -or $window -eq $root) { Write-Output '{"error":"No window found"}'; exit; }
+$windowName = $window.Current.Name;
+$elements = @();
+$condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::IsEnabledProperty, $true);
+$allElements = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition);
 foreach ($el in $allElements) {
     try {
-        $rect = $el.Current.BoundingRectangle
+        $rect = $el.Current.BoundingRectangle;
         if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [System.Double]::IsInfinity($rect.X)) {
-            $type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", ""
-
-            # Skip non-interactive types
+            $type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", "";
             if ($type -in @("Button", "Edit", "Text", "ComboBox", "CheckBox", "RadioButton", "ListItem", "MenuItem", "TabItem", "Hyperlink", "Image")) {
-                $value = ""
-                try {
-                    $valuePattern = $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-                    if ($valuePattern) { $value = $valuePattern.Current.Value }
-                } catch {}
-
-                $elements += @{
-                    type = $type
-                    name = $el.Current.Name
-                    automationId = $el.Current.AutomationId
-                    x = [int]$rect.X
-                    y = [int]$rect.Y
-                    width = [int]$rect.Width
-                    height = [int]$rect.Height
-                    isEnabled = $el.Current.IsEnabled
-                    value = $value
-                }
+                $value = "";
+                try { $valuePattern = $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern); if ($valuePattern) { $value = $valuePattern.Current.Value } } catch {}
+                $elements += @{ type = $type; name = $el.Current.Name; automationId = $el.Current.AutomationId; x = [int]$rect.X; y = [int]$rect.Y; width = [int]$rect.Width; height = [int]$rect.Height; isEnabled = $el.Current.IsEnabled; value = $value }
             }
         }
     } catch {}
 }
-
-# Limit to first 100 elements to avoid huge output
-$elements = $elements | Select-Object -First 100
-
-$result = @{
-    window = $windowName
-    elements = $elements
-    timestamp = (Get-Date -Format "o")
-}
-
+$elements = $elements | Select-Object -First 100;
+$result = @{ window = $windowName; elements = $elements; timestamp = (Get-Date -Format "o") };
 $result | ConvertTo-Json -Depth 3 -Compress
 `;
 
   try {
+    // Encode script as Base64 for reliable execution
+    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
     const { stdout } = await execAsync(
-      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
       { maxBuffer: 10 * 1024 * 1024, timeout: 10000 }
     );
 
@@ -165,32 +128,20 @@ export async function getElementAtPoint(x: number, y: number): Promise<UIElement
   }
 
   const psScript = `
-Add-Type -AssemblyName UIAutomationClient
-
-$point = New-Object System.Windows.Point(${x}, ${y})
-$el = [System.Windows.Automation.AutomationElement]::FromPoint($point)
-
+Add-Type -AssemblyName UIAutomationClient;
+$point = New-Object System.Windows.Point(${x}, ${y});
+$el = [System.Windows.Automation.AutomationElement]::FromPoint($point);
 if ($el) {
-    $rect = $el.Current.BoundingRectangle
-    $result = @{
-        type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", ""
-        name = $el.Current.Name
-        automationId = $el.Current.AutomationId
-        x = [int]$rect.X
-        y = [int]$rect.Y
-        width = [int]$rect.Width
-        height = [int]$rect.Height
-        isEnabled = $el.Current.IsEnabled
-    }
+    $rect = $el.Current.BoundingRectangle;
+    $result = @{ type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", ""; name = $el.Current.Name; automationId = $el.Current.AutomationId; x = [int]$rect.X; y = [int]$rect.Y; width = [int]$rect.Width; height = [int]$rect.Height; isEnabled = $el.Current.IsEnabled };
     $result | ConvertTo-Json -Compress
-} else {
-    Write-Output 'null'
-}
+} else { Write-Output 'null' }
 `;
 
   try {
+    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
     const { stdout } = await execAsync(
-      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
       { timeout: 5000 }
     );
 
