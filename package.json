@@ -1,0 +1,71 @@
+{
+  "name": "osbot",
+  "version": "0.1.0",
+  "description": "Vision-based desktop automation engine",
+  "type": "module",
+  "bin": {
+    "osbot": "./dist/bin/osbot.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch bin/osbot.ts",
+    "start": "node dist/bin/osbot.js",
+    "lint": "eslint src bin --ext .ts",
+    "lint:fix": "eslint src bin --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"bin/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "automation",
+    "desktop",
+    "vision",
+    "claude",
+    "mcp",
+    "cli"
+  ],
+  "author": "",
+  "license": "BSL-1.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikealkeal/osbot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mikealkeal/osbot/issues"
+  },
+  "homepage": "https://github.com/mikealkeal/osbot#readme",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "ora": "^8.1.1",
+    "screenshot-desktop": "^1.15.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
