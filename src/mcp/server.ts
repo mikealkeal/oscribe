@@ -242,7 +242,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${(coords.confidence ?? 0 * 100).toFixed(0)}% confidence. Clicked successfully.`,
+              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${((coords.confidence ?? 0) * 100).toFixed(0)}% confidence. Clicked successfully.`,
             },
           ],
         };
@@ -280,7 +280,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${(coords.confidence ?? 0 * 100).toFixed(0)}% confidence.`,
+              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${((coords.confidence ?? 0) * 100).toFixed(0)}% confidence.`,
             },
           ],
         };
