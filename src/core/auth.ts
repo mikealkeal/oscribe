@@ -108,7 +108,9 @@ export async function login(): Promise<TokenData> {
 
         if (!code) {
           res.writeHead(400, { 'Content-Type': 'text/html' });
-          res.end('<html><body><h1>Authentication failed</h1><p>No code received</p></body></html>');
+          res.end(
+            '<html><body><h1>Authentication failed</h1><p>No code received</p></body></html>'
+          );
           server.close();
           reject(new Error('No authorization code received'));
           return;
@@ -138,10 +140,8 @@ export async function login(): Promise<TokenData> {
           const tokenData = (await tokenResponse.json()) as TokenData;
 
           // Calculate expiration time
-          if (tokenData.expires_at === undefined) {
-            // Default to 1 hour if not provided
-            tokenData.expires_at = Date.now() + 3600 * 1000;
-          }
+          // Default to 1 hour if not provided
+          tokenData.expires_at ??= Date.now() + 3600 * 1000;
 
           // Save token
           saveToken(tokenData);
@@ -179,10 +179,13 @@ export async function login(): Promise<TokenData> {
     });
 
     // Timeout after 5 minutes
-    setTimeout(() => {
-      server.close();
-      reject(new Error('Authentication timed out'));
-    }, 5 * 60 * 1000);
+    setTimeout(
+      () => {
+        server.close();
+        reject(new Error('Authentication timed out'));
+      },
+      5 * 60 * 1000
+    );
   });
 }
 
@@ -248,9 +251,7 @@ export async function refreshToken(token: TokenData): Promise<TokenData> {
 
   const newToken = (await response.json()) as TokenData;
 
-  if (newToken.expires_at === undefined) {
-    newToken.expires_at = Date.now() + 3600 * 1000;
-  }
+  newToken.expires_at ??= Date.now() + 3600 * 1000;
 
   // Keep refresh token if not returned
   if (!newToken.refresh_token && token.refresh_token) {

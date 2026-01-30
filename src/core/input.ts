@@ -41,7 +41,11 @@ export interface TypeOptions {
   dryRun?: boolean;
 }
 
-export async function moveMouse(x: number, y: number, options: { dryRun?: boolean } = {}): Promise<void> {
+export async function moveMouse(
+  x: number,
+  y: number,
+  options: { dryRun?: boolean } = {}
+): Promise<void> {
   const { dryRun = false } = options;
 
   if (dryRun) {
@@ -161,7 +165,7 @@ export async function hotkey(keys: string[], options: { dryRun?: boolean } = {})
         modifiers.push(mapped);
       }
     } else {
-      mainKey = keyMap[lower] || k.toLowerCase();
+      mainKey = keyMap[lower] ?? k.toLowerCase();
     }
   });
 
