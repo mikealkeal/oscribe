@@ -158,6 +158,74 @@ export async function describeScreen(screenshotBase64: string): Promise<string> 
   return response.content[0]?.type === 'text' ? response.content[0].text : '';
 }
 
+export async function verifyAction(
+  beforeBase64: string,
+  afterBase64: string,
+  action: string,
+  target: string
+): Promise<boolean> {
+  const anthropic = getClient();
+  const config = loadConfig();
+
+  const prompt = `Compare these two screenshots (before and after an action).
+
+Action performed: ${action} on "${target}"
+
+Question: Did this action succeed? Look for visual changes that indicate success:
+- Menu/dialog opened or closed
+- Button state changed (clicked, highlighted)
+- New content appeared
+- Navigation occurred
+- Element became visible/hidden
+
+Answer with ONLY "YES" or "NO" followed by a brief explanation (max 20 words).`;
+
+  const response = await anthropic.messages.create({
+    model: config.model,
+    max_tokens: 128,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'BEFORE:',
+          },
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/png',
+              data: beforeBase64,
+            },
+          },
+          {
+            type: 'text',
+            text: 'AFTER:',
+          },
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/png',
+              data: afterBase64,
+            },
+          },
+          {
+            type: 'text',
+            text: prompt,
+          },
+        ],
+      },
+    ],
+  });
+
+  const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+  const success = text.trim().toUpperCase().startsWith('YES');
+
+  return success;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

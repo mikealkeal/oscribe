@@ -202,3 +202,44 @@ export async function scroll(
 export function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Get current mouse cursor position
+ */
+export function getMousePosition(): { x: number; y: number } {
+  const pos = robot.getMousePos();
+  return { x: pos.x, y: pos.y };
+}
+
+/**
+ * Click at current mouse position (no movement)
+ */
+export async function clickAtCurrentPosition(options: Omit<ClickOptions, 'double'> & { double?: boolean } = {}): Promise<void> {
+  const { button = 'left', double = false, dryRun = false } = options;
+  const pos = getMousePosition();
+
+  if (dryRun) {
+    console.log(`[DRY RUN] Click ${button} at current position (${pos.x}, ${pos.y})${double ? ' (double)' : ''}`);
+    return;
+  }
+
+  // Adapt to Windows swapped mouse buttons
+  let effectiveButton = button;
+  if (mouseButtonsSwapped && process.platform === 'win32') {
+    if (button === 'left') effectiveButton = 'right';
+    else if (button === 'right') effectiveButton = 'left';
+  }
+
+  console.error(`[OSBot] Click ${button} (effective: ${effectiveButton}) at current position (${pos.x}, ${pos.y})`);
+
+  if (double) {
+    robot.mouseToggle('down', effectiveButton);
+    robot.mouseToggle('up', effectiveButton);
+    await wait(100);
+    robot.mouseToggle('down', effectiveButton);
+    robot.mouseToggle('up', effectiveButton);
+  } else {
+    robot.mouseToggle('down', effectiveButton);
+    robot.mouseToggle('up', effectiveButton);
+  }
+}

@@ -75,6 +75,31 @@ node tests/test-session-custom-dir.js
 
 ---
 
+### test-smart-click.js
+Test du feedback loop intelligent (smartClick).
+
+```bash
+node tests/test-smart-click.js
+```
+
+**Scénario:**
+1. Liste les fenêtres disponibles
+2. Focus sur Brave (ou fenêtre active)
+3. Smart click avec vérification automatique
+4. Retry si échec (max 3 tentatives)
+
+**Teste:**
+- Screenshot before/after
+- Verification avec Claude Vision
+- Retry intelligent si action échoue
+- Confidence tracking
+
+**Résultat:** Click vérifié avec détails des tentatives
+
+**Guide CLI:** Voir `tests/test-cli-smart-click.md` pour tests manuels
+
+---
+
 ## Utilisation
 
 ### Avant de lancer les tests
@@ -98,6 +123,9 @@ node tests/test-automation-brave-focus.js
 
 # Test config custom
 node tests/test-session-custom-dir.js
+
+# Test smart click avec feedback loop (nécessite app ouverte)
+node tests/test-smart-click.js
 ```
 
 ---

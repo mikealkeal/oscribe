@@ -6,6 +6,7 @@ import type { Command } from 'commander';
 import { initCommand } from './commands/init.js';
 import { loginCommand } from './commands/login.js';
 import { clickCommand } from './commands/click.js';
+import { locateCommand } from './commands/locate.js';
 import { typeCommand } from './commands/type.js';
 import { hotkeyCommand } from './commands/hotkey.js';
 import { screenshotCommand } from './commands/screenshot.js';
@@ -17,6 +18,7 @@ export function registerCommands(program: Command): void {
   program.addCommand(initCommand());
   program.addCommand(loginCommand());
   program.addCommand(clickCommand());
+  program.addCommand(locateCommand());
   program.addCommand(typeCommand());
   program.addCommand(hotkeyCommand());
   program.addCommand(screenshotCommand());

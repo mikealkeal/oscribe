@@ -8,6 +8,8 @@
   "maxTokensDescribe": 1024,
   "redirectPort": 9876,
   "sessionDir": null,
+  "maxAttempts": 3,
+  "verifyDelay": 800,
   "_comments": {
     "defaultScreen": "Default monitor to capture (0 = primary)",
     "dryRun": "Simulate actions without executing",
@@ -18,6 +20,8 @@
     "maxTokensDescribe": "Max tokens for screen description",
     "redirectPort": "OAuth redirect port",
     "sessionDir": "Custom directory for session recordings. Examples:",
+    "maxAttempts": "Max retry attempts for smart actions (1-10, default: 3)",
+    "verifyDelay": "Delay in ms before verifying action (0-5000, default: 800)",
     "_sessionDirExamples": [
       "null (default: ~/.osbot/sessions)",
       "\"C:/Projects/osbot-sessions\" (absolute path)",

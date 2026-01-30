@@ -13,9 +13,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { captureScreen, listScreens } from '../core/screenshot.js';
-import { click, typeText, hotkey, scroll, moveMouse } from '../core/input.js';
+import { click, typeText, hotkey, scroll, moveMouse, getMousePosition, clickAtCurrentPosition } from '../core/input.js';
 import { listWindows, focusWindow } from '../core/windows.js';
-import { locateElement } from '../core/vision.js';
 
 // Get version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -43,23 +42,11 @@ const MoveSchema = z.object({
   y: z.number().describe('Y coordinate to move mouse to'),
 });
 
-const ClickSchema = z.object({
-  target: z.string().describe('Description of the element to click'),
-  screen: z.number().default(0).describe('Screen number (default: 0)'),
-  window: z.string().optional().describe('Window to focus first (optional)'),
-  button: z.enum(['left', 'right', 'middle']).default('left').describe('Mouse button to click'),
-});
-
 const ClickAtSchema = z.object({
-  x: z.number().describe('X coordinate to click'),
-  y: z.number().describe('Y coordinate to click'),
+  x: z.number().optional().describe('X coordinate to click (if omitted, clicks at current cursor position)'),
+  y: z.number().optional().describe('Y coordinate to click (if omitted, clicks at current cursor position)'),
   window: z.string().optional().describe('Window to focus first (optional)'),
   button: z.enum(['left', 'right', 'middle']).default('left').describe('Mouse button to click'),
-});
-
-const LocateSchema = z.object({
-  target: z.string().describe('Description of the element to locate'),
-  screen: z.number().default(0).describe('Screen number (default: 0)'),
 });
 
 const TypeSchema = z.object({
@@ -83,6 +70,10 @@ const FocusSchema = z.object({
   window: z.string().describe('Window title or app name'),
 });
 
+const WaitSchema = z.object({
+  ms: z.number().min(0).max(30000).describe('Milliseconds to wait (max 30000)'),
+});
+
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -101,21 +92,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'os_click',
-        description: 'Click on an element identified by description using AI vision',
+        description: 'Click at current cursor position. Use os_move first to position the cursor, then os_click to click. This ensures precise clicking by separating movement and click.',
         inputSchema: {
           type: 'object',
           properties: {
-            target: { type: 'string', description: 'Description of the element to click (e.g., "Submit button", "File menu")' },
-            screen: { type: 'number', description: 'Screen number (default: 0)' },
             window: { type: 'string', description: 'Window to focus first (optional)' },
             button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)' },
           },
-          required: ['target'],
         },
       },
       {
         name: 'os_click_at',
-        description: 'Click at specific screen coordinates (fallback for when exact coordinates are known)',
+        description: 'Click at specific screen coordinates (moves and clicks in one action). Prefer using os_move + os_click for more precise control.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -125,18 +113,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)' },
           },
           required: ['x', 'y'],
-        },
-      },
-      {
-        name: 'os_locate',
-        description: 'Locate an element by description and return its coordinates without clicking',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            target: { type: 'string', description: 'Description of the element to locate' },
-            screen: { type: 'number', description: 'Screen number (default: 0)' },
-          },
-          required: ['target'],
         },
       },
       {
@@ -202,6 +178,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['keys'],
         },
       },
+      {
+        name: 'os_wait',
+        description: 'Wait for a specified duration (useful for waiting for UI to load)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            ms: { type: 'number', description: 'Milliseconds to wait (max 30000)' },
+          },
+          required: ['ms'],
+        },
+      },
     ],
   };
 });
@@ -227,33 +214,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'os_click': {
-        const { target, screen, window: windowName, button } = ClickSchema.parse(args);
+        // Click at current cursor position (no movement)
+        const { window: windowName, button } = ClickAtSchema.parse(args);
 
         if (windowName) {
           await focusWindow(windowName);
         }
 
-        // Capture screenshot
-        const screenshot = await captureScreen({ screen });
-
-        // Locate element using vision
-        const coords = await locateElement(target, screenshot.base64);
-
-        // Click at located coordinates
-        await click(coords.x, coords.y, { button });
+        const pos = getMousePosition();
+        await clickAtCurrentPosition({ button });
 
         return {
           content: [
             {
               type: 'text',
-              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${((coords.confidence ?? 0) * 100).toFixed(0)}% confidence. ${button === 'right' ? 'Right-clicked' : button === 'middle' ? 'Middle-clicked' : 'Clicked'} successfully.`,
+              text: `${button === 'right' ? 'Right-clicked' : button === 'middle' ? 'Middle-clicked' : 'Clicked'} at current position (${pos.x}, ${pos.y})`,
             },
           ],
         };
       }
 
       case 'os_click_at': {
+        // Move to coordinates then click
         const { x, y, window: windowName, button } = ClickAtSchema.parse(args);
+
+        if (x === undefined || y === undefined) {
+          throw new Error('os_click_at requires x and y coordinates. Use os_click to click at current position.');
+        }
 
         if (windowName) {
           await focusWindow(windowName);
@@ -266,25 +253,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `${button === 'right' ? 'Right-clicked' : button === 'middle' ? 'Middle-clicked' : 'Clicked'} at (${x}, ${y})`,
-            },
-          ],
-        };
-      }
-
-      case 'os_locate': {
-        const { target, screen } = LocateSchema.parse(args);
-
-        // Capture screenshot
-        const screenshot = await captureScreen({ screen });
-
-        // Locate element using vision
-        const coords = await locateElement(target, screenshot.base64);
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Found "${target}" at (${coords.x}, ${coords.y}) with ${((coords.confidence ?? 0) * 100).toFixed(0)}% confidence.`,
             },
           ],
         };
@@ -307,14 +275,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'os_screenshot': {
         const { screen } = ScreenshotSchema.parse(args);
         const screenshot = await captureScreen({ screen });
+        const cursor = getMousePosition();
 
-        // Always return raw image - let MCP client (Claude Code) analyze it
+        // Return image + cursor position for calibration
         return {
           content: [
             {
               type: 'image',
               data: screenshot.base64,
               mimeType: 'image/png',
+            },
+            {
+              type: 'text',
+              text: `Cursor position: (${cursor.x}, ${cursor.y})`,
             },
           ],
         };
@@ -372,6 +345,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Pressed: ${keys}`,
+            },
+          ],
+        };
+      }
+
+      case 'os_wait': {
+        const { ms } = WaitSchema.parse(args);
+        await new Promise((resolve) => setTimeout(resolve, ms));
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Waited ${ms}ms`,
             },
           ],
         };

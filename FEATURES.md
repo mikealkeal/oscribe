@@ -1,0 +1,147 @@
+# Features & Ideas
+
+Idées de fonctionnalités à implémenter dans OSbot.
+
+---
+
+## Performance & Optimization
+
+### Screenshot Resolution Scaling
+**Objectif:** Réduire les tokens API en diminuant la résolution envoyée à Claude.
+
+**Implémentation:**
+- Option `maxWidth` ou `scaleFactor` dans config
+- Resize proportionnel (garder aspect ratio)
+- Scale back des coordonnées retournées par Claude
+
+**Exemple:**
+```typescript
+// Original: 1920×1080 → ~1500 tokens
+// Resize: 960×540 → ~375 tokens (4× moins!)
+// Claude retourne: {x: 480, y: 270}
+// On clique à: {x: 960, y: 540} (× 2)
+```
+
+**Config:**
+```json
+{
+  "maxResolution": 1920,
+  "scaleForVision": 0.5
+}
+```
+
+**Status:** 💡 Idée - À implémenter
+
+---
+
+## Monitoring & Debugging
+
+### Lightweight Monitoring UI
+**Objectif:** Voir ce que OSbot fait pendant l'automation sans casser le flow.
+
+**Besoins:**
+- Overlay léger (transparent, petit coin d'écran)
+- Affiche action en cours + output
+- ESC pour arrêter le recording
+- Pas d'interférence avec l'automation
+
+**Questions:**
+- Intégré dans OSbot ou projet séparé?
+- Electron? Terminal overlay? Web UI?
+
+**Status:** 💡 Idée - À définir
+
+---
+
+## Vision & Detection
+
+### Format d'image alternatif
+**Évalué:** WebP vs PNG vs GIF
+
+**Conclusion:**
+- WebP = plus léger (25-35%) mais **même tokens** (résolution identique)
+- GIF = 256 couleurs max, dégradation qualité
+- PNG = safe pour UI/texte
+
+**Décision:** Garder PNG pour l'instant, WebP si besoin d'optimiser upload.
+
+**Status:** ⏸️ Pas prioritaire
+
+---
+
+## CLI Enhancements
+
+### Commande `osbot locate`
+**Status:** ✅ Implémenté
+
+**Usage:**
+```bash
+osbot locate "Login button"
+# → Found at (450, 320) with 95% confidence
+```
+
+---
+
+## MCP & Integration
+
+### Cursor Position Tracking
+**Status:** ✅ Implémenté
+
+**Problème:** L'agent ne calibrait pas ses clics car il ne voyait pas où était le curseur.
+
+**Solution:** `os_screenshot` retourne maintenant la position du curseur avec l'image:
+```
+Cursor position: (450, 320)
+```
+
+L'agent peut ainsi comparer la position actuelle du curseur avec la cible et ajuster.
+
+---
+
+### Move + Click Séparés
+**Status:** ✅ Implémenté
+
+**Problème:** Les clics manquaient leur cible car mouvement et clic étaient combinés.
+
+**Solution:**
+- `os_click` = clic à la position actuelle (sans coordonnées)
+- `os_click_at` = déplacer + cliquer (coordonnées requises)
+- `os_move` = déplacer le curseur sans cliquer
+
+**Workflow recommandé:**
+1. `os_screenshot` → voir l'écran + position curseur
+2. `os_move` → déplacer vers la cible
+3. `os_screenshot` → vérifier le curseur est bien positionné
+4. `os_click` → cliquer à la position actuelle
+
+---
+
+### Supprimer messages d'auth inutiles
+**Problème:** Erreurs auth dans contexte MCP (Claude Code) alors que ça marche.
+
+**Solution:**
+- Détecter si `CLAUDE_CODE_OAUTH_TOKEN` existe
+- Pas d'erreur si token présent
+- Ou commentaire moins agressif
+
+**Status:** 🔴 Frustration utilisateur - À corriger
+
+---
+
+## Session Recording
+
+### Custom Session Directory
+**Status:** ✅ Implémenté (`sessionDir` dans config)
+
+### Screenshots dans rapport
+**Status:** ✅ Implémenté (REPORT.md avec screenshots)
+
+---
+
+## Légende
+
+- ✅ Implémenté
+- 🔴 Prioritaire / Bug
+- 💡 Idée validée
+- ⏸️ Pas prioritaire
+- ❓ À discuter

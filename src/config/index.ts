@@ -24,6 +24,9 @@ export const ConfigSchema = z.object({
   redirectPort: z.number().default(9876),
   // Session recording
   sessionDir: z.string().optional(),
+  // Smart automation
+  maxAttempts: z.number().min(1).max(10).default(3),
+  verifyDelay: z.number().min(0).max(5000).default(800),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -37,6 +40,8 @@ const DEFAULT_CONFIG: Config = {
   maxTokensLocate: 256,
   maxTokensDescribe: 1024,
   redirectPort: 9876,
+  maxAttempts: 3,
+  verifyDelay: 800,
 };
 
 export function getConfigDir(): string {
