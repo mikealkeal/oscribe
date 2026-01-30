@@ -128,7 +128,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'os_screenshot',
-        description: 'Capture a screenshot',
+        description: 'Capture a screenshot and get current cursor position. Returns the image AND cursor coordinates (x, y) for calibration. Always check cursor position before clicking to ensure accuracy.',
         inputSchema: {
           type: 'object',
           properties: {
