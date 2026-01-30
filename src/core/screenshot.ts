@@ -5,9 +5,10 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, unlink, mkdtemp } from 'node:fs/promises';
+import { readFile, unlink, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { loadConfig } from '../config/index.js';
 
 const execAsync = promisify(exec);
 
@@ -69,28 +70,110 @@ export async function captureScreen(options: ScreenshotOptions = {}): Promise<Sc
  * Windows: Use PowerShell with .NET
  */
 async function captureWindows(outputPath: string, screenIndex: number): Promise<void> {
-  // Use base64-encoded command for reliable execution
+  // Generate unique namespace to avoid type conflicts
+  const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+  const config = loadConfig();
+  const cursorSize = config.cursorSize;
+  const cursorMultiplier = Math.floor(cursorSize / 32);
+
   const psScript = `
-Add-Type -AssemblyName System.Windows.Forms;
-Add-Type -AssemblyName System.Drawing;
-$screen = [System.Windows.Forms.Screen]::PrimaryScreen;
-$allScreens = [System.Windows.Forms.Screen]::AllScreens;
-if ($allScreens.Length -gt ${screenIndex}) { $screen = $allScreens[${screenIndex}] };
-$bounds = $screen.Bounds;
-$bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height);
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap);
-$graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size);
-$bitmap.Save('${outputPath.replace(/\\/g, '\\\\')}', [System.Drawing.Imaging.ImageFormat]::Png);
-$graphics.Dispose();
-$bitmap.Dispose();
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+if (-not ([System.Management.Automation.PSTypeName]'OSBot${uniqueId}.CursorCapture').Type) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Drawing;
+
+namespace OSBot${uniqueId} {
+    public class CursorCapture {
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT { public int x; public int y; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CURSORINFO {
+            public int cbSize;
+            public int flags;
+            public IntPtr hCursor;
+            public POINT ptScreenPos;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ICONINFO {
+            public bool fIcon;
+            public int xHotspot;
+            public int yHotspot;
+            public IntPtr hbmMask;
+            public IntPtr hbmColor;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern bool GetCursorInfo(out CURSORINFO pci);
+
+        [DllImport("user32.dll")]
+        public static extern bool GetIconInfo(IntPtr hIcon, out ICONINFO piconinfo);
+
+        [DllImport("user32.dll")]
+        public static extern bool DrawIconEx(IntPtr hdc, int xLeft, int yTop, IntPtr hIcon,
+            int cxWidth, int cyHeight, int istepIfAniCur, IntPtr hbrFlickerFreeDraw, int diFlags);
+
+        [DllImport("gdi32.dll")]
+        public static extern bool DeleteObject(IntPtr hObject);
+
+        public const int CURSOR_SHOWING = 0x00000001;
+        public const int DI_NORMAL = 0x0003;
+    }
+}
+'@
+}
+
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen
+$allScreens = [System.Windows.Forms.Screen]::AllScreens
+if ($allScreens.Length -gt ${screenIndex}) { $screen = $allScreens[${screenIndex}] }
+$bounds = $screen.Bounds
+$bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+
+$cursorInfo = New-Object OSBot${uniqueId}.CursorCapture+CURSORINFO
+$cursorInfo.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($cursorInfo)
+if ([OSBot${uniqueId}.CursorCapture]::GetCursorInfo([ref]$cursorInfo)) {
+    if (($cursorInfo.flags -band [OSBot${uniqueId}.CursorCapture]::CURSOR_SHOWING) -ne 0) {
+        $iconInfo = New-Object OSBot${uniqueId}.CursorCapture+ICONINFO
+        if ([OSBot${uniqueId}.CursorCapture]::GetIconInfo($cursorInfo.hCursor, [ref]$iconInfo)) {
+            $x = $cursorInfo.ptScreenPos.x - $bounds.X - ($iconInfo.xHotspot * ${cursorMultiplier})
+            $y = $cursorInfo.ptScreenPos.y - $bounds.Y - ($iconInfo.yHotspot * ${cursorMultiplier})
+            $hdc = $graphics.GetHdc()
+            [OSBot${uniqueId}.CursorCapture]::DrawIconEx($hdc, $x, $y, $cursorInfo.hCursor, ${cursorSize}, ${cursorSize}, 0, [IntPtr]::Zero, [OSBot${uniqueId}.CursorCapture]::DI_NORMAL) | Out-Null
+            $graphics.ReleaseHdc($hdc)
+            if ($iconInfo.hbmMask -ne [IntPtr]::Zero) { [OSBot${uniqueId}.CursorCapture]::DeleteObject($iconInfo.hbmMask) | Out-Null }
+            if ($iconInfo.hbmColor -ne [IntPtr]::Zero) { [OSBot${uniqueId}.CursorCapture]::DeleteObject($iconInfo.hbmColor) | Out-Null }
+        }
+    }
+}
+
+$bitmap.Save('${outputPath.replace(/\\/g, '\\\\')}', [System.Drawing.Imaging.ImageFormat]::Png)
+$graphics.Dispose()
+$bitmap.Dispose()
 `;
 
-  // Encode as base64 for reliable execution
-  const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+  // Write to temp file (script too long for command line)
+  const tempDir = await mkdtemp(join(tmpdir(), 'osbot-'));
+  const tempScript = join(tempDir, 'capture.ps1');
 
-  await execAsync(`powershell -NoProfile -EncodedCommand ${encoded}`, {
-    windowsHide: true,
-  });
+  try {
+    await writeFile(tempScript, psScript, 'utf8');
+    await execAsync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tempScript}"`, {
+      windowsHide: true,
+    });
+  } finally {
+    try {
+      await unlink(tempScript);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
 }
 
 /**
@@ -122,7 +205,7 @@ async function captureLinux(outputPath: string, screen: number): Promise<void> {
       }
       const buffer = await screenshot.default({
         screen: display.id,
-        filename: outputPath
+        filename: outputPath,
       });
       if (!buffer) {
         throw new Error('Failed to capture screenshot');
@@ -177,7 +260,9 @@ Add-Type -AssemblyName System.Windows.Forms;
 async function listScreensMacOS(): Promise<Display[]> {
   try {
     const { stdout } = await execAsync('system_profiler SPDisplaysDataType -json');
-    const data = JSON.parse(stdout) as { SPDisplaysDataType?: Array<{ spdisplays_ndrvs?: Array<{ _name?: string }> }> };
+    const data = JSON.parse(stdout) as {
+      SPDisplaysDataType?: Array<{ spdisplays_ndrvs?: Array<{ _name?: string }> }>;
+    };
     const displays = data.SPDisplaysDataType?.[0]?.spdisplays_ndrvs ?? [];
 
     return displays.map((d, i) => ({

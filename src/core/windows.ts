@@ -91,7 +91,9 @@ $windows | ForEach-Object { Write-Output $_ };
 
 async function listWindowsMacOS(): Promise<WindowInfo[]> {
   try {
-    const { stdout } = await execAsync(`osascript -e 'tell application "System Events" to get name of (processes where background only is false)'`);
+    const { stdout } = await execAsync(
+      `osascript -e 'tell application "System Events" to get name of (processes where background only is false)'`
+    );
     const apps = stdout.trim().split(', ');
     return apps.map((app, i) => ({
       id: String(i),
@@ -211,5 +213,7 @@ async function focusWindowLinux(titleOrApp: string): Promise<boolean> {
 }
 
 export async function getActiveWindow(): Promise<WindowInfo | null> {
-  throw new Error('getActiveWindow() is not yet implemented. Use listWindows() and focusWindow() instead.');
+  throw new Error(
+    'getActiveWindow() is not yet implemented. Use listWindows() and focusWindow() instead.'
+  );
 }

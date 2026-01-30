@@ -1,59 +1,78 @@
 /**
- * login command - OAuth authentication with Claude Max/Pro
+ * login command - API key authentication
  */
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import ora from 'ora';
-import { login as oauthLogin, isLoggedIn, logout } from '../../core/auth.js';
+import * as readline from 'node:readline';
+import { saveConfig, getApiKey } from '../../config/index.js';
 
 export function loginCommand(): Command {
   return new Command('login')
-    .description('Authenticate with your Claude account (Max/Pro)')
-    .option('--logout', 'Log out and remove stored credentials')
+    .description('Configure Anthropic API key')
+    .option('--key <apiKey>', 'API key')
     .option('--status', 'Check login status')
-    .action(async (options: { logout?: boolean; status?: boolean }) => {
+    .option('--logout', 'Remove stored API key')
+    .action(async (options: { key?: string; status?: boolean; logout?: boolean }) => {
       // Check status
       if (options.status) {
-        if (isLoggedIn()) {
-          console.log(chalk.green('✓ Logged in'));
+        const key = getApiKey();
+        if (key) {
+          console.log(chalk.green('✓ API key configured'));
+          console.log(chalk.gray(`  Key: ${key.slice(0, 12)}...`));
         } else {
-          console.log(chalk.yellow('Not logged in. Run "osbot login" to authenticate.'));
+          console.log(chalk.yellow('No API key configured.'));
+          console.log('Run: osbot login --key sk-ant-xxx');
         }
         return;
       }
 
       // Logout
       if (options.logout) {
-        logout();
-        console.log(chalk.green('Logged out successfully.'));
+        saveConfig({ apiKey: undefined });
+        console.log(chalk.green('API key removed.'));
         return;
       }
 
-      // Check if already logged in
-      if (isLoggedIn()) {
-        console.log(chalk.yellow('Already logged in. Use --logout to log out first.'));
-        return;
+      let apiKey = options.key;
+
+      // If no key provided, prompt for it
+      if (!apiKey) {
+        const existing = getApiKey();
+        if (existing) {
+          console.log(chalk.green('API key already configured.'));
+          console.log('Use --key to update or --logout to remove.');
+          return;
+        }
+
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        apiKey = await new Promise<string>((resolve) => {
+          rl.question('Enter your Anthropic API key: ', (answer) => {
+            rl.close();
+            resolve(answer.trim());
+          });
+        });
       }
 
-      // OAuth login
-      const spinner = ora('Starting authentication...').start();
-
-      try {
-        spinner.text = 'Waiting for browser authentication...';
-        await oauthLogin();
-
-        spinner.succeed(chalk.green('Authentication successful!'));
-        console.log();
-        console.log('You can now use OSbot with your Claude Max/Pro subscription.');
-        console.log();
-        console.log('Try:');
-        console.log(`  ${chalk.cyan('osbot screenshot --describe')}`);
-        console.log(`  ${chalk.cyan('osbot click "the Start button"')}`);
-      } catch (error) {
-        spinner.fail(chalk.red('Authentication failed'));
-        console.error(error instanceof Error ? error.message : error);
+      if (!apiKey) {
+        console.error(chalk.red('No API key provided.'));
         process.exit(1);
       }
+
+      if (!apiKey.startsWith('sk-ant-')) {
+        console.error(chalk.red('Invalid API key format. Should start with "sk-ant-"'));
+        process.exit(1);
+      }
+
+      saveConfig({ apiKey });
+      console.log(chalk.green('API key saved!'));
+      console.log();
+      console.log('Try:');
+      console.log(`  ${chalk.cyan('osbot screenshot --describe')}`);
+      console.log(`  ${chalk.cyan('osbot click "the Start button"')}`);
     });
 }

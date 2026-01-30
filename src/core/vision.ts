@@ -44,8 +44,8 @@ function getClient(): Anthropic {
 
   throw new Error(
     'Not authenticated. Options:\n' +
-    '  1. Run "claude setup-token" and set CLAUDE_CODE_OAUTH_TOKEN\n' +
-    '  2. Run "osbot login --key sk-ant-xxx" with your API key'
+      '  1. Run "claude setup-token" and set CLAUDE_CODE_OAUTH_TOKEN\n' +
+      '  2. Run "osbot login --key sk-ant-xxx" with your API key'
   );
 }
 
@@ -95,8 +95,7 @@ If the element is not found, return {"x": -1, "y": -1, "confidence": 0}`;
         ],
       });
 
-      const text =
-        response.content[0]?.type === 'text' ? response.content[0].text : '';
+      const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
