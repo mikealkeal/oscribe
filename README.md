@@ -2,6 +2,7 @@
 
 > Vision-based desktop automation CLI and MCP server. Control any application via screenshot + AI vision, without APIs or UI Automation.
 
+[![CI](https://github.com/mikealkeal/osbot/workflows/CI/badge.svg)](https://github.com/mikealkeal/osbot/actions/workflows/ci.yml)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
