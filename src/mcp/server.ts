@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { captureScreen, listScreens } from '../core/screenshot.js';
 import { click, typeText, hotkey, scroll, moveMouse, getMousePosition, clickAtCurrentPosition } from '../core/input.js';
 import { listWindows, focusWindow } from '../core/windows.js';
+import { getUIElements, getElementAtPoint } from '../core/uiautomation.js';
 
 // Get version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -72,6 +73,15 @@ const FocusSchema = z.object({
 
 const WaitSchema = z.object({
   ms: z.number().min(0).max(30000).describe('Milliseconds to wait (max 30000)'),
+});
+
+const InspectSchema = z.object({
+  window: z.string().optional().describe('Window title to inspect (optional, defaults to focused window)'),
+});
+
+const InspectPointSchema = z.object({
+  x: z.number().describe('X coordinate'),
+  y: z.number().describe('Y coordinate'),
 });
 
 // List available tools
@@ -187,6 +197,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             ms: { type: 'number', description: 'Milliseconds to wait (max 30000)' },
           },
           required: ['ms'],
+        },
+      },
+      {
+        name: 'os_inspect',
+        description: 'Get UI elements from Windows UI Automation (accessibility tree). Returns structured data about all interactive elements: buttons, text fields, menus, etc. with their exact coordinates. Like a DOM for desktop apps. Use this to find elements precisely before clicking.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            window: { type: 'string', description: 'Window title to inspect (optional, defaults to focused window)' },
+          },
+        },
+      },
+      {
+        name: 'os_inspect_at',
+        description: 'Get the UI element at specific coordinates. Returns element type, name, bounds, and state.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            x: { type: 'number', description: 'X coordinate' },
+            y: { type: 'number', description: 'Y coordinate' },
+          },
+          required: ['x', 'y'],
         },
       },
     ],
@@ -359,6 +391,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Waited ${ms}ms`,
+            },
+          ],
+        };
+      }
+
+      case 'os_inspect': {
+        const { window: windowTitle } = InspectSchema.parse(args);
+        const tree = await getUIElements(windowTitle);
+
+        // Format elements for readability
+        const elementsText = tree.elements.map((el) => {
+          const center = { x: el.x + Math.floor(el.width / 2), y: el.y + Math.floor(el.height / 2) };
+          return `- ${el.type}: "${el.name}" at (${center.x}, ${center.y}) [${el.width}x${el.height}]${el.value ? ` value="${el.value}"` : ''}${el.automationId ? ` id="${el.automationId}"` : ''}`;
+        }).join('\n');
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Window: ${tree.window}\nElements (${tree.elements.length}):\n${elementsText || 'No interactive elements found'}`,
+            },
+          ],
+        };
+      }
+
+      case 'os_inspect_at': {
+        const { x, y } = InspectPointSchema.parse(args);
+        const element = await getElementAtPoint(x, y);
+
+        if (!element) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No element found at (${x}, ${y})`,
+              },
+            ],
+          };
+        }
+
+        const center = { x: element.x + Math.floor(element.width / 2), y: element.y + Math.floor(element.height / 2) };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Element at (${x}, ${y}):\n- Type: ${element.type}\n- Name: "${element.name}"\n- Center: (${center.x}, ${center.y})\n- Bounds: ${element.x},${element.y} ${element.width}x${element.height}\n- Enabled: ${element.isEnabled}${element.automationId ? `\n- AutomationId: ${element.automationId}` : ''}`,
             },
           ],
         };

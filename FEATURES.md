@@ -116,6 +116,58 @@ L'agent peut ainsi comparer la position actuelle du curseur avec la cible et aju
 
 ---
 
+### Windows UI Automation (Accessibility Tree)
+**Status:** ✅ Implémenté
+
+**Concept:** Utiliser les APIs d'accessibilité Windows (comme les lecteurs d'écran) pour obtenir un "DOM" du desktop.
+
+**MCP Tools:**
+- `os_inspect` → liste tous les éléments interactifs de la fenêtre
+- `os_inspect_at` → élément à une coordonnée précise
+
+**Données retournées par élément:**
+```typescript
+{
+  type: string,        // Button, Edit, Text, ComboBox, CheckBox,
+                       // RadioButton, ListItem, MenuItem, TabItem,
+                       // Hyperlink, Image
+  name: string,        // Label visible ("Save", "Cancel", "Search...")
+  automationId: string,// ID interne (stable, pour devs)
+  x: number,           // Position X
+  y: number,           // Position Y
+  width: number,       // Largeur
+  height: number,      // Hauteur
+  isEnabled: boolean,  // Actif ou grisé
+  value?: string       // Contenu (pour TextBox)
+}
+```
+
+**Exemple de retour `os_inspect`:**
+```
+Window: Notepad
+Elements (5):
+- Edit: "Text Editor" at (450, 300) [800x400] id="Edit1"
+- Button: "Save" at (100, 50) [80x30]
+- Button: "Open" at (190, 50) [80x30]
+- MenuItem: "File" at (30, 25) [50x25]
+- MenuItem: "Edit" at (85, 25) [50x25]
+```
+
+**Avantages vs Vision seule:**
+| Vision | UI Automation |
+|--------|---------------|
+| "Je vois un bouton bleu" | `Button name="Save" at (450, 320)` |
+| Estimation de position | Coordonnées exactes |
+| Peut rater du texte | Texte garanti |
+| Coûte des tokens | Gratuit, instantané |
+
+**L'agent a maintenant 3 sources:**
+1. **Screenshot** → contexte visuel
+2. **Cursor position** → calibration
+3. **UI Tree** → données structurées (DOM du desktop)
+
+---
+
 ### Supprimer messages d'auth inutiles
 **Problème:** Erreurs auth dans contexte MCP (Claude Code) alors que ça marche.
 

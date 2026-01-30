@@ -8,3 +8,4 @@ export * from './input.js';
 export * from './windows.js';
 export * from './auth.js';
 export * from './automation.js';
+export * from './uiautomation.js';
