@@ -58,8 +58,8 @@ export class SessionRecorder {
 
   private generateSessionId(): string {
     const now = new Date();
-    const date = now.toISOString().split('T')[0];
-    const time = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+    const date = now.toISOString().split('T')[0] ?? 'unknown';
+    const time = (now.toTimeString().split(' ')[0] ?? '00-00-00').replace(/:/g, '-');
     const random = Math.random().toString(36).substring(2, 8);
     return `${date}_${time}_${random}`;
   }
@@ -75,14 +75,14 @@ export class SessionRecorder {
     const start = Date.now();
     const timestamp = new Date().toISOString();
     let result: 'success' | 'error' = 'success';
-    let error: string | undefined;
+    let errorMsg: string | undefined = undefined;
     let returnValue: unknown;
 
     try {
       returnValue = await fn();
     } catch (err) {
       result = 'error';
-      error = err instanceof Error ? err.message : String(err);
+      errorMsg = err instanceof Error ? err.message : String(err);
       throw err;
     } finally {
       const duration_ms = Date.now() - start;
@@ -92,9 +92,12 @@ export class SessionRecorder {
         action,
         params,
         result,
-        error,
         duration_ms,
       };
+
+      if (errorMsg !== undefined) {
+        actionRecord.error = errorMsg;
+      }
 
       this.session.actions.push(actionRecord);
       this.saveSession();
@@ -118,7 +121,10 @@ export class SessionRecorder {
 
     // Update last action with screenshot reference
     if (this.session.actions.length > 0) {
-      this.session.actions[this.session.actions.length - 1].screenshot = filepath;
+      const lastAction = this.session.actions[this.session.actions.length - 1];
+      if (lastAction) {
+        lastAction.screenshot = filepath;
+      }
     }
 
     this.saveSession();
