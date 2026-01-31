@@ -147,7 +147,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'os_screenshot',
-        description: 'Capture a screenshot with UI elements and cursor position. Returns: (1) the image, (2) cursor coordinates (x, y), (3) UI elements from Windows UI Automation with their screen coordinates. Use this to see the screen AND know where to click precisely.',
+        description: `Capture a screenshot with UI elements and cursor position. Returns: (1) the image, (2) cursor coordinates (x, y), (3) UI elements from Windows UI Automation with their screen coordinates. Use this to see the screen AND know where to click precisely.
+
+⚠️ CRITICAL - HOW TO CLICK ON ELEMENTS:
+- ALWAYS use the center=(x,y) coordinates from the Elements list below
+- NEVER guess or estimate positions visually from the image
+- The JSON coordinates are EXACT screen positions, the image is only for visual context
+
+Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x=951, y=658)`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -355,17 +362,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return `- ${el.type}: "${el.name}" pos=(${el.x},${el.y}) center=(${cx},${cy}) [${el.width}x${el.height}]${el.value ? ` value="${el.value}"` : ''}${el.automationId ? ` id="${el.automationId}"` : ''}`;
         }).join('\n');
 
-        // Return image + cursor + UI elements only (content saved to session but not sent to AI)
+        // Return: 1) Instructions, 2) JSON with coordinates, 3) Image for visual context
+        const instruction = `⚠️ IMPORTANT: To click on elements, use center=(x,y) coordinates from the Elements list below with os_click_at(x, y). Do NOT estimate positions from the image.`;
+
         return {
           content: [
+            {
+              type: 'text',
+              text: `${instruction}\n\nCursor position: (${cursor.x}, ${cursor.y})\n\nWindow: ${tree.window}\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}`,
+            },
             {
               type: 'image',
               data: screenshot.base64,
               mimeType: 'image/png',
-            },
-            {
-              type: 'text',
-              text: `Cursor position: (${cursor.x}, ${cursor.y})\n\nWindow: ${tree.window}\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}`,
             },
           ],
         };

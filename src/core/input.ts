@@ -254,11 +254,31 @@ export async function scroll(
 
   // Execute with logging
   await withLogging('scroll', params, async () => {
-    // robotjs scrollMouse(x, y) - positive y scrolls down, negative up
-    const x = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
-    const y = direction === 'down' ? amount : direction === 'up' ? -amount : 0;
+    if (process.platform === 'win32') {
+      // Use PowerShell on Windows - robotjs scrollMouse is broken on Windows
+      // WHEEL_DELTA = 120 per "click", multiply by amount
+      const wheelDelta = 120 * amount;
+      const scrollValue = direction === 'down' ? -wheelDelta : direction === 'up' ? wheelDelta : 0;
+      const horizontalValue = direction === 'right' ? wheelDelta : direction === 'left' ? -wheelDelta : 0;
 
-    robot.scrollMouse(x, y);
+      if (scrollValue !== 0) {
+        // Vertical scroll using PowerShell + C# interop
+        // Use single quotes in PowerShell to avoid here-string issues
+        const csharpCode = `using System; using System.Runtime.InteropServices; public class MouseScroll { [DllImport(\\"user32.dll\\")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, int dwExtraInfo); public const uint MOUSEEVENTF_WHEEL = 0x0800; }`;
+        const psCommand = `Add-Type -TypeDefinition '${csharpCode}'; [MouseScroll]::mouse_event([MouseScroll]::MOUSEEVENTF_WHEEL, 0, 0, ${scrollValue}, 0)`;
+        await execAsync(`powershell -Command "${psCommand}"`);
+      } else if (horizontalValue !== 0) {
+        // Horizontal scroll
+        const csharpCode = `using System; using System.Runtime.InteropServices; public class MouseScroll { [DllImport(\\"user32.dll\\")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, int dwExtraInfo); public const uint MOUSEEVENTF_HWHEEL = 0x01000; }`;
+        const psCommand = `Add-Type -TypeDefinition '${csharpCode}'; [MouseScroll]::mouse_event([MouseScroll]::MOUSEEVENTF_HWHEEL, 0, 0, ${horizontalValue}, 0)`;
+        await execAsync(`powershell -Command "${psCommand}"`);
+      }
+    } else {
+      // Use robotjs on macOS/Linux where it works
+      const x = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
+      const y = direction === 'down' ? -amount : direction === 'up' ? amount : 0;
+      robot.scrollMouse(x, y);
+    }
   });
 
   // Update kill switch state
