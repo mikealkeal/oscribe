@@ -56,8 +56,13 @@ temp/
 # MCP config (local development)
 .mcp.json
 
-# Development notes
+# Development notes & private docs
 OSbot-points-a-revoir.md
+CLAUDE.md
+SESSION-*.md
+FEATURE*.md
+TEST-*.md
+TESTING.md
 
 # Windows temp files
 nul

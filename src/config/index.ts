@@ -10,6 +10,37 @@ import { z } from 'zod';
 const CONFIG_DIR = join(homedir(), '.osbot');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
+// Security: Restricted mode schema
+const RestrictedModeSchema = z.object({
+  enabled: z.boolean().default(true),
+  blockedApps: z.array(z.string()).default([
+    // Password managers
+    '1password', 'lastpass', 'bitwarden', 'keepass', 'dashlane',
+    // Banking patterns
+    'bank', 'banking',
+    // System/Admin tools
+    'credential manager', 'windows security', 'regedit', 'gpedit',
+    'task manager',
+    // Admin terminals (various languages)
+    'administrator:', 'administrateur :', 'admin:',
+    '(admin)', '(administrateur)',
+  ]),
+  blockedHotkeys: z.array(z.string()).default([
+    'win+l',            // Lock screen
+    'ctrl+alt+delete',  // Security attention
+    'win+r',            // Run dialog
+    'win+x',            // Quick link menu
+  ]),
+  allowedApps: z.array(z.string()).default([]),  // Whitelist mode if non-empty
+});
+
+// Security: Kill switch schema
+const KillSwitchSchema = z.object({
+  enabled: z.boolean().default(true),
+  movementThreshold: z.number().min(1).max(500).default(50),  // pixels
+  cooldownMs: z.number().min(0).max(5000).default(500),       // ms after our action
+});
+
 export const ConfigSchema = z.object({
   apiKey: z.string().optional(),
   defaultScreen: z.number().default(0),
@@ -27,6 +58,9 @@ export const ConfigSchema = z.object({
   // Smart automation
   maxAttempts: z.number().min(1).max(10).default(3),
   verifyDelay: z.number().min(0).max(5000).default(800),
+  // Security
+  restrictedMode: RestrictedModeSchema.default({}),
+  killSwitch: KillSwitchSchema.default({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -42,6 +76,24 @@ const DEFAULT_CONFIG: Config = {
   redirectPort: 9876,
   maxAttempts: 3,
   verifyDelay: 800,
+  restrictedMode: {
+    enabled: true,
+    blockedApps: [
+      '1password', 'lastpass', 'bitwarden', 'keepass', 'dashlane',
+      'bank', 'banking',
+      'credential manager', 'windows security', 'regedit', 'gpedit',
+      'task manager',
+      'administrator:', 'administrateur :', 'admin:',
+      '(admin)', '(administrateur)',
+    ],
+    blockedHotkeys: ['win+l', 'ctrl+alt+delete', 'win+r', 'win+x'],
+    allowedApps: [],
+  },
+  killSwitch: {
+    enabled: true,
+    movementThreshold: 50,
+    cooldownMs: 500,
+  },
 };
 
 export function getConfigDir(): string {

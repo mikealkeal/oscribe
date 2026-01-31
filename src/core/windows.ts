@@ -131,6 +131,9 @@ export async function focusWindow(titleOrApp: string): Promise<boolean> {
 }
 
 async function focusWindowWindows(titleOrApp: string): Promise<boolean> {
+  // Escape for PowerShell string (double the single quotes)
+  const escaped = titleOrApp.replace(/'/g, "''");
+
   const psScript = `
 Add-Type @"
 using System;
@@ -154,7 +157,7 @@ public class Win32 {
 "@;
 
 $targetWindow = $null;
-$searchTerm = "${titleOrApp.replace(/"/g, '`"')}";
+$searchTerm = '${escaped}';
 $callback = {
     param($hwnd, $lParam)
     if ([Win32]::IsWindowVisible($hwnd)) {
@@ -163,7 +166,7 @@ $callback = {
             $sb = New-Object System.Text.StringBuilder($length + 1);
             [Win32]::GetWindowText($hwnd, $sb, $sb.Capacity) | Out-Null;
             $title = $sb.ToString();
-            if ($title -like "*$searchTerm*") {
+            if ($title.IndexOf($searchTerm, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
                 $script:targetWindow = $hwnd;
                 return $false;
             }
@@ -213,7 +216,87 @@ async function focusWindowLinux(titleOrApp: string): Promise<boolean> {
 }
 
 export async function getActiveWindow(): Promise<WindowInfo | null> {
-  throw new Error(
-    'getActiveWindow() is not yet implemented. Use listWindows() and focusWindow() instead.'
-  );
+  if (platform === 'win32') {
+    return getActiveWindowWindows();
+  } else if (platform === 'darwin') {
+    return getActiveWindowMacOS();
+  } else {
+    return getActiveWindowLinux();
+  }
+}
+
+async function getActiveWindowWindows(): Promise<WindowInfo | null> {
+  const psScript = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class Win32Active {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll")]
+    public static extern int GetWindowTextLength(IntPtr hWnd);
+}
+"@;
+
+$hwnd = [Win32Active]::GetForegroundWindow();
+if ($hwnd -eq [IntPtr]::Zero) {
+    exit 1;
+}
+$length = [Win32Active]::GetWindowTextLength($hwnd);
+if ($length -eq 0) {
+    Write-Output "$hwnd|";
+    exit 0;
+}
+$sb = New-Object System.Text.StringBuilder($length + 1);
+[Win32Active]::GetWindowText($hwnd, $sb, $sb.Capacity) | Out-Null;
+Write-Output "$hwnd|$($sb.ToString())";
+`;
+
+  try {
+    const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+    const { stdout } = await execAsync(`powershell -NoProfile -EncodedCommand ${encoded}`, {
+      windowsHide: true,
+    });
+
+    const line = stdout.trim();
+    if (!line) return null;
+
+    const parts = line.split('|');
+    const id = parts[0] ?? '';
+    const title = parts.slice(1).join('|');
+    return { id, title };
+  } catch {
+    return null;
+  }
+}
+
+async function getActiveWindowMacOS(): Promise<WindowInfo | null> {
+  try {
+    const { stdout } = await execAsync(
+      `osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true'`
+    );
+    const app = stdout.trim();
+    return { id: '0', title: app, app };
+  } catch {
+    return null;
+  }
+}
+
+async function getActiveWindowLinux(): Promise<WindowInfo | null> {
+  try {
+    // Get active window ID
+    const { stdout: idOut } = await execAsync('xdotool getactivewindow');
+    const id = idOut.trim();
+
+    // Get window name
+    const { stdout: nameOut } = await execAsync(`xdotool getwindowname ${id}`);
+    const title = nameOut.trim();
+
+    return { id, title };
+  } catch {
+    return null;
+  }
 }

@@ -16,6 +16,9 @@ import { captureScreen, listScreens } from '../core/screenshot.js';
 import { click, typeText, hotkey, scroll, moveMouse, getMousePosition, clickAtCurrentPosition } from '../core/input.js';
 import { listWindows, focusWindow } from '../core/windows.js';
 import { getUIElements, getElementAtPoint } from '../core/uiautomation.js';
+import { RestrictedActionError } from '../core/security.js';
+import { UserInterruptError } from '../core/killswitch.js';
+import { SessionRecorder, ScreenContext } from '../core/session-recorder.js';
 
 // Get version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -75,14 +78,20 @@ const WaitSchema = z.object({
   ms: z.number().min(0).max(30000).describe('Milliseconds to wait (max 30000)'),
 });
 
-const InspectSchema = z.object({
-  window: z.string().optional().describe('Window title to inspect (optional, defaults to focused window)'),
-});
-
 const InspectPointSchema = z.object({
   x: z.number().describe('X coordinate'),
   y: z.number().describe('Y coordinate'),
 });
+
+// Session recorder - initialized on first action
+let sessionRecorder: SessionRecorder | null = null;
+
+function getRecorder(): SessionRecorder {
+  if (!sessionRecorder) {
+    sessionRecorder = new SessionRecorder('MCP Session');
+  }
+  return sessionRecorder;
+}
 
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -138,7 +147,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'os_screenshot',
-        description: 'Capture a screenshot and get current cursor position. Returns the image AND cursor coordinates (x, y) for calibration. Always check cursor position before clicking to ensure accuracy.',
+        description: 'Capture a screenshot with UI elements and cursor position. Returns: (1) the image, (2) cursor coordinates (x, y), (3) UI elements from Windows UI Automation with their screen coordinates. Use this to see the screen AND know where to click precisely.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -200,16 +209,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'os_inspect',
-        description: 'Get UI elements from the FOCUSED WINDOW using Windows UI Automation. Returns structured data about interactive elements (buttons, text fields, menus, etc.) with SCREEN coordinates (absolute, not window-relative). Like a DOM for desktop apps. If a modal/dialog is open, it returns the modal elements, not the parent window.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            window: { type: 'string', description: 'Window title to inspect (optional, defaults to focused window)' },
-          },
-        },
-      },
-      {
         name: 'os_inspect_at',
         description: 'Get the UI element at specific coordinates. Returns element type, name, bounds, and state.',
         inputSchema: {
@@ -228,12 +227,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+  const recorder = getRecorder();
 
   try {
     switch (name) {
       case 'os_move': {
         const { x, y } = MoveSchema.parse(args);
-        await moveMouse(x, y);
+
+        await recorder.recordAction('os_move', { x, y }, async () => {
+          await moveMouse(x, y);
+        });
 
         return {
           content: [
@@ -248,13 +251,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'os_click': {
         // Click at current cursor position (no movement)
         const { window: windowName, button } = ClickAtSchema.parse(args);
-
-        if (windowName) {
-          await focusWindow(windowName);
-        }
-
         const pos = getMousePosition();
-        await clickAtCurrentPosition({ button });
+
+        await recorder.recordAction('os_click', { x: pos.x, y: pos.y, button, window: windowName }, async () => {
+          if (windowName) {
+            await focusWindow(windowName);
+          }
+          await clickAtCurrentPosition({ button });
+        });
 
         return {
           content: [
@@ -274,11 +278,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error('os_click_at requires x and y coordinates. Use os_click to click at current position.');
         }
 
-        if (windowName) {
-          await focusWindow(windowName);
-        }
-
-        await click(x, y, { button });
+        await recorder.recordAction('os_click_at', { x, y, button, window: windowName }, async () => {
+          if (windowName) {
+            await focusWindow(windowName);
+          }
+          await click(x, y, { button });
+        });
 
         return {
           content: [
@@ -292,7 +297,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'os_type': {
         const { text } = TypeSchema.parse(args);
-        await typeText(text);
+
+        await recorder.recordAction('os_type', { text }, async () => {
+          await typeText(text);
+        });
 
         return {
           content: [
@@ -309,7 +317,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const screenshot = await captureScreen({ screen });
         const cursor = getMousePosition();
 
-        // Return image + cursor position for calibration
+        // Get UI elements from focused window
+        const tree = await getUIElements();
+
+        // Helper to format element with centered coordinates
+        const formatElement = (el: typeof tree.ui[0]) => ({
+          type: el.type,
+          ...(el.name ? { name: el.name } : {}),
+          x: el.x,
+          y: el.y,
+          width: el.width,
+          height: el.height,
+          centerX: el.x + Math.floor(el.width / 2),
+          centerY: el.y + Math.floor(el.height / 2),
+          ...(!el.isEnabled ? { isEnabled: false } : {}),
+          ...(el.automationId ? { automationId: el.automationId } : {}),
+          ...(el.value ? { value: el.value } : {}),
+        });
+
+        // Build full context for session recording (includes content for reference)
+        const screenContext: ScreenContext = {
+          window: tree.window,
+          cursor: { x: cursor.x, y: cursor.y },
+          timestamp: new Date().toISOString(),
+          elements: tree.elements.map(formatElement),
+        };
+
+        // Save screenshot + full context to session
+        const recorder = getRecorder();
+        recorder.saveScreenshot(screenshot.base64, 'screenshot', screenContext);
+
+        // Format text output - ONLY UI elements sent to AI (not Text content)
+        // Show both corner (x,y) and center for clicking
+        const elementsText = tree.ui.map((el) => {
+          const cx = el.x + Math.floor(el.width / 2);
+          const cy = el.y + Math.floor(el.height / 2);
+          return `- ${el.type}: "${el.name}" pos=(${el.x},${el.y}) center=(${cx},${cy}) [${el.width}x${el.height}]${el.value ? ` value="${el.value}"` : ''}${el.automationId ? ` id="${el.automationId}"` : ''}`;
+        }).join('\n');
+
+        // Return image + cursor + UI elements only (content saved to session but not sent to AI)
         return {
           content: [
             {
@@ -319,7 +365,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
             {
               type: 'text',
-              text: `Cursor position: (${cursor.x}, ${cursor.y})`,
+              text: `Cursor position: (${cursor.x}, ${cursor.y})\n\nWindow: ${tree.window}\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}`,
             },
           ],
         };
@@ -341,7 +387,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'os_focus': {
         const { window: windowName } = FocusSchema.parse(args);
-        const success = await focusWindow(windowName);
+        let success = false;
+
+        await recorder.recordAction('os_focus', { window: windowName }, async () => {
+          success = await focusWindow(windowName);
+        });
 
         return {
           content: [
@@ -355,7 +405,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'os_scroll': {
         const { direction, amount } = ScrollSchema.parse(args);
-        await scroll(direction, amount);
+
+        await recorder.recordAction('os_scroll', { direction, amount }, async () => {
+          await scroll(direction, amount);
+        });
 
         return {
           content: [
@@ -370,7 +423,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'os_hotkey': {
         const { keys } = HotkeySchema.parse(args);
         const keyList = keys.split('+').map((k) => k.trim());
-        await hotkey(keyList);
+
+        await recorder.recordAction('os_hotkey', { keys }, async () => {
+          await hotkey(keyList);
+        });
 
         return {
           content: [
@@ -384,33 +440,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'os_wait': {
         const { ms } = WaitSchema.parse(args);
-        await new Promise((resolve) => setTimeout(resolve, ms));
+
+        await recorder.recordAction('os_wait', { ms }, async () => {
+          await new Promise((resolve) => setTimeout(resolve, ms));
+        });
 
         return {
           content: [
             {
               type: 'text',
               text: `Waited ${ms}ms`,
-            },
-          ],
-        };
-      }
-
-      case 'os_inspect': {
-        const { window: windowTitle } = InspectSchema.parse(args);
-        const tree = await getUIElements(windowTitle);
-
-        // Format elements for readability
-        const elementsText = tree.elements.map((el) => {
-          const center = { x: el.x + Math.floor(el.width / 2), y: el.y + Math.floor(el.height / 2) };
-          return `- ${el.type}: "${el.name}" at (${center.x}, ${center.y}) [${el.width}x${el.height}]${el.value ? ` value="${el.value}"` : ''}${el.automationId ? ` id="${el.automationId}"` : ''}`;
-        }).join('\n');
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Window: ${tree.window}\nElements (${tree.elements.length}):\n${elementsText || 'No interactive elements found'}`,
             },
           ],
         };
@@ -446,11 +485,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
+    // Format error message based on type
+    let errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Security errors get special prefixes for clarity
+    if (error instanceof RestrictedActionError) {
+      errorMessage = `[RESTRICTED] ${error.message}`;
+    } else if (error instanceof UserInterruptError) {
+      errorMessage = `[KILL SWITCH] ${error.message}`;
+    }
+
     return {
       content: [
         {
           type: 'text',
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error: ${errorMessage}`,
         },
       ],
       isError: true,

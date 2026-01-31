@@ -30,8 +30,9 @@ OSbot is your fallback when traditional automation tools fail:
 ## Features
 
 - 🎯 **Vision-based** - Locate UI elements by description using Claude vision
+- 🔍 **UI Automation** - Get element coordinates via Windows accessibility tree
 - 🖱️ **Cross-platform** - Windows, macOS, and Linux support
-- 🔧 **CLI + MCP** - Use standalone or integrate with AI agents
+- 🔧 **CLI + MCP** - Use standalone or integrate with AI agents (12 tools)
 - 🔐 **OAuth Support** - Uses your Claude Max/Pro subscription (no API costs!)
 - ⚡ **Native Input** - Uses robotjs for reliable mouse/keyboard control
 - 📸 **Multi-monitor** - Supports multiple screens with DPI awareness
@@ -213,32 +214,34 @@ Or if using from source:
 
 ### Available MCP Tools
 
-| Tool            | Description                                            | Parameters                         |
-| --------------- | ------------------------------------------------------ | ---------------------------------- |
-| `os_click`      | 🎯 **Click by description (vision-based)**             | `target`, `screen?`, `window?`     |
-| `os_locate`     | 🔍 **Locate element, return coordinates**              | `target`, `screen?`                |
-| `os_click_at`   | Click at exact coordinates (fallback)                  | `x`, `y`, `window?`                |
-| `os_move`       | Move mouse cursor                                      | `x`, `y`                           |
-| `os_type`       | Type text                                              | `text`                             |
-| `os_hotkey`     | Press keyboard shortcut                                | `keys` (e.g., "ctrl+c")            |
-| `os_screenshot` | Capture screenshot                                     | `screen?` (default: 0)             |
-| `os_windows`    | List open windows                                      | -                                  |
-| `os_focus`      | Focus window                                           | `window`                           |
-| `os_scroll`     | Scroll in direction                                    | `direction`, `amount?`             |
+| Tool             | Description                                            | Parameters                         |
+| ---------------- | ------------------------------------------------------ | ---------------------------------- |
+| `os_screenshot`  | 📸 Capture screenshot + cursor position                | `screen?` (default: 0)             |
+| `os_inspect`     | 🔍 **Get UI elements via Windows UI Automation**       | `window?`                          |
+| `os_inspect_at`  | 🎯 Get element info at coordinates                     | `x`, `y`                           |
+| `os_move`        | Move mouse cursor                                      | `x`, `y`                           |
+| `os_click`       | Click at current cursor position                       | `window?`, `button?`               |
+| `os_click_at`    | Move + click in one action                             | `x`, `y`, `window?`, `button?`     |
+| `os_type`        | Type text                                              | `text`                             |
+| `os_hotkey`      | Press keyboard shortcut                                | `keys` (e.g., "ctrl+c")            |
+| `os_scroll`      | Scroll in direction                                    | `direction`, `amount?`             |
+| `os_windows`     | List open windows + screens                            | -                                  |
+| `os_focus`       | Focus window by name                                   | `window`                           |
+| `os_wait`        | Wait for duration (UI loading)                         | `ms` (max 30000)                   |
 
 ### MCP Usage Example
 
-Once configured, you can ask Claude Desktop:
+Once configured, Claude can automate your desktop:
 
-> "Take a screenshot and click on the Submit button"
+> "Take a screenshot and describe what you see"
 
-> "Find the File menu and click on Export as PNG"
+> "Inspect the UI elements and click the Submit button"
 
-> "Locate the blue button and tell me its coordinates"
+> "List all windows and focus on Chrome"
 
-> "Type 'hello world' and press enter"
+> "Type 'hello world' and press Ctrl+Enter"
 
-Claude will use vision-based tools automatically - no need for manual coordinates!
+**Workflow**: Claude uses `os_screenshot` to see the screen, `os_inspect` to get element coordinates, then `os_move` + `os_click` for precise interaction.
 
 ## Configuration
 
@@ -295,25 +298,30 @@ DRY_RUN=false
 
 ## How It Works
 
-OSbot uses a three-layer approach for universal desktop automation:
+OSbot uses a multi-layer approach for universal desktop automation:
 
 1. **Screenshot Layer** - Captures screen using native OS tools:
    - Windows: PowerShell + .NET System.Drawing
    - macOS: `screencapture` command
    - Linux: `scrot` or ImageMagick `import`
 
-2. **Vision Layer** - Claude analyzes screenshots to:
+2. **UI Automation Layer** (Windows) - Gets element coordinates via accessibility tree:
+   - Uses Windows UI Automation API via PowerShell
+   - Returns interactive elements with screen coordinates
+   - Works like a DOM for desktop apps
+
+3. **Vision Layer** - Claude analyzes screenshots to:
    - Locate UI elements by natural language description
    - Describe screen content
    - Provide coordinates for interaction
 
-3. **Input Layer** - Uses robotjs for:
+4. **Input Layer** - Uses robotjs for:
    - Mouse movement and clicks
    - Keyboard input and hotkeys
    - Cross-platform native control
    - Adapts to Windows mouse button swap settings
 
-This approach works with **any application**, regardless of technology stack, accessibility support, or API availability.
+**Best strategy**: Use `os_inspect` for precise coordinates when UI Automation works, fall back to vision-based analysis for canvas apps, games, or legacy software.
 
 ## Development
 
@@ -349,12 +357,13 @@ osbot/
 │   │   ├── auth.ts           # OAuth 2.0 + PKCE authentication
 │   │   ├── vision.ts         # Claude API integration
 │   │   ├── input.ts          # Mouse/keyboard control (robotjs)
-│   │   └── windows.ts        # Window management
+│   │   ├── windows.ts        # Window management
+│   │   └── uiautomation.ts   # Windows UI Automation (accessibility)
 │   ├── cli/
 │   │   ├── commands/         # CLI command implementations
 │   │   └── index.ts          # Command registration
 │   ├── mcp/
-│   │   └── server.ts         # MCP server implementation
+│   │   └── server.ts         # MCP server (12 tools)
 │   ├── config/
 │   │   └── index.ts          # Config management with Zod
 │   └── index.ts              # Main exports

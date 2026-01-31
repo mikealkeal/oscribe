@@ -13,6 +13,7 @@ import { screenshotCommand } from './commands/screenshot.js';
 import { windowsCommand } from './commands/windows.js';
 import { focusCommand } from './commands/focus.js';
 import { serveCommand } from './commands/serve.js';
+import { tokensCommand } from './commands/tokens.js';
 
 export function registerCommands(program: Command): void {
   program.addCommand(initCommand());
@@ -25,4 +26,5 @@ export function registerCommands(program: Command): void {
   program.addCommand(windowsCommand());
   program.addCommand(focusCommand());
   program.addCommand(serveCommand());
+  program.addCommand(tokensCommand());
 }

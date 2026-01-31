@@ -1,0 +1,112 @@
+{
+  "$schema": "./window-types.schema.json",
+  "version": "1.0.0",
+  "description": "Configuration des stratégies UI Automation par type de fenêtre",
+
+  "strategies": {
+    "native": {
+      "description": "UI Automation standard - fenêtres Win32/WPF/WinForms",
+      "method": "findAll",
+      "scope": "window"
+    },
+    "webview2": {
+      "description": "WebView2 (Edge) - chercher Document dans l'arbre global",
+      "method": "findDocument",
+      "scope": "global",
+      "documentMatch": "byProcessOrTitle"
+    },
+    "electron": {
+      "description": "Electron (Chromium) - chercher Document Chrome",
+      "method": "findDocument",
+      "scope": "global",
+      "documentMatch": "byClassName"
+    },
+    "uwp": {
+      "description": "UWP/WinUI natif - UI Automation avec XAML",
+      "method": "findAll",
+      "scope": "window"
+    }
+  },
+
+  "windowClasses": {
+    "WinUIDesktopWin32WindowClass": {
+      "strategy": "webview2",
+      "note": "WinUI3 apps (Photos, new Windows apps)",
+      "examples": ["Photos", "Microsoft Store", "Windows Terminal Settings"]
+    },
+    "Chrome_WidgetWin_1": {
+      "strategy": "electron",
+      "note": "Electron/Chromium apps",
+      "examples": ["VSCode", "Discord", "Slack", "Teams", "Spotify"]
+    },
+    "Chrome_WidgetWin_0": {
+      "strategy": "electron",
+      "note": "Chromium embedded widget"
+    },
+    "ApplicationFrameWindow": {
+      "strategy": "uwp",
+      "note": "UWP apps container",
+      "examples": ["Calculator", "Settings", "Mail"]
+    },
+    "Windows.UI.Core.CoreWindow": {
+      "strategy": "uwp",
+      "note": "UWP core window"
+    },
+    "Notepad": {
+      "strategy": "native",
+      "note": "Classic Win32 Notepad"
+    },
+    "CabinetWClass": {
+      "strategy": "native",
+      "note": "Windows Explorer"
+    },
+    "XLMAIN": {
+      "strategy": "native",
+      "note": "Microsoft Excel"
+    },
+    "OpusApp": {
+      "strategy": "native",
+      "note": "Microsoft Word"
+    },
+    "PPTFrameClass": {
+      "strategy": "native",
+      "note": "Microsoft PowerPoint"
+    },
+    "MozillaWindowClass": {
+      "strategy": "native",
+      "note": "Firefox - uses native accessibility"
+    }
+  },
+
+  "processNames": {
+    "msedgewebview2": {
+      "strategy": "webview2",
+      "note": "WebView2 renderer process"
+    },
+    "electron": {
+      "strategy": "electron"
+    },
+    "code": {
+      "strategy": "electron",
+      "note": "Visual Studio Code"
+    },
+    "discord": {
+      "strategy": "electron"
+    },
+    "slack": {
+      "strategy": "electron"
+    },
+    "teams": {
+      "strategy": "webview2",
+      "note": "New Teams uses WebView2"
+    },
+    "spotify": {
+      "strategy": "electron"
+    }
+  },
+
+  "fallback": {
+    "strategy": "native",
+    "note": "Default to standard UI Automation if type unknown"
+  }
+}

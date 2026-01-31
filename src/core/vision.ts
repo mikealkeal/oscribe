@@ -8,6 +8,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { getApiKey, loadConfig } from '../config/index.js';
+import { recordTokenUsage, type TokenUsage } from './token-tracker.js';
 
 const CoordinatesSchema = z.object({
   x: z.number(),
@@ -95,6 +96,9 @@ If the element is not found, return {"x": -1, "y": -1, "confidence": 0}`;
         ],
       });
 
+      // Track token usage
+      recordTokenUsage('locate', config.model, extractUsage(response));
+
       const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -154,6 +158,9 @@ export async function describeScreen(screenshotBase64: string): Promise<string> 
       },
     ],
   });
+
+  // Track token usage
+  recordTokenUsage('describe', config.model, extractUsage(response));
 
   return response.content[0]?.type === 'text' ? response.content[0].text : '';
 }
@@ -220,6 +227,9 @@ Answer with ONLY "YES" or "NO" followed by a brief explanation (max 20 words).`;
     ],
   });
 
+  // Track token usage
+  recordTokenUsage('verify', config.model, extractUsage(response));
+
   const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
   const success = text.trim().toUpperCase().startsWith('YES');
 
@@ -228,4 +238,32 @@ Answer with ONLY "YES" or "NO" followed by a brief explanation (max 20 words).`;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Extract token usage from API response
+ */
+function extractUsage(response: Anthropic.Message): TokenUsage {
+  // Cache fields may exist on usage object but aren't in the base type
+  const usage = response.usage as {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+
+  const result: TokenUsage = {
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+  };
+
+  // Only add cache fields if they have values (exactOptionalPropertyTypes)
+  if (usage.cache_creation_input_tokens !== undefined) {
+    result.cacheCreationInputTokens = usage.cache_creation_input_tokens;
+  }
+  if (usage.cache_read_input_tokens !== undefined) {
+    result.cacheReadInputTokens = usage.cache_read_input_tokens;
+  }
+
+  return result;
 }

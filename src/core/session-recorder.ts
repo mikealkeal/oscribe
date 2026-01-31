@@ -8,6 +8,42 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { loadConfig } from '../config/index.js';
 
+export interface UIElementContext {
+  type: string;
+  name?: string | undefined; // Omitted if empty
+  automationId?: string | undefined;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  centerX: number;
+  centerY: number;
+  isEnabled?: boolean | undefined; // Omitted if true (default)
+  value?: string | undefined;
+}
+
+/** Context for UI interactive elements (excludes Text) */
+export interface UIContext {
+  window: string;
+  cursor: { x: number; y: number };
+  timestamp: string;
+  elements: UIElementContext[];
+}
+
+/** Context for text content only */
+export interface TextContext {
+  window: string;
+  timestamp: string;
+  elements: UIElementContext[];
+}
+
+export interface ScreenContext {
+  window: string;
+  cursor: { x: number; y: number };
+  timestamp: string;
+  elements: UIElementContext[];
+}
+
 export interface SessionAction {
   timestamp: string;
   action: string;
@@ -15,6 +51,7 @@ export interface SessionAction {
   result: 'success' | 'error';
   error?: string;
   screenshot?: string; // Path to screenshot
+  context?: string; // Path to context.json
   duration_ms: number;
 }
 
@@ -115,9 +152,13 @@ export class SessionRecorder {
 
   /**
    * Save a screenshot with the session
+   * Generates 2 context files:
+   * - {index}_ui.json: Interactive UI elements (Button, CheckBox, etc.)
+   * - {index}_text.json: Text content elements
    */
-  saveScreenshot(screenshotBase64: string, label?: string): string {
-    const filename = `${this.session.actions.length}_${label || 'screenshot'}.png`;
+  saveScreenshot(screenshotBase64: string, label?: string, context?: ScreenContext): string {
+    const index = this.session.screenshots.length;
+    const filename = `${index}_${label || 'screenshot'}.png`;
     const filepath = join(this.screenshotDir, filename);
 
     // Save screenshot
@@ -126,11 +167,42 @@ export class SessionRecorder {
 
     this.session.screenshots.push(filepath);
 
-    // Update last action with screenshot reference
+    // Save context split into UI elements and text content
+    let uiContextPath: string | undefined;
+
+    if (context) {
+      // Separate UI interactive elements from text content
+      const uiElements = context.elements.filter((el) => el.type !== 'Text');
+      const textElements = context.elements.filter((el) => el.type === 'Text');
+
+      // Save UI elements context
+      uiContextPath = join(this.screenshotDir, `${index}_ui.json`);
+      const uiContext: UIContext = {
+        window: context.window,
+        cursor: context.cursor,
+        timestamp: context.timestamp,
+        elements: uiElements,
+      };
+      writeFileSync(uiContextPath, JSON.stringify(uiContext, null, 2));
+
+      // Save text content context
+      const textContextFile = join(this.screenshotDir, `${index}_text.json`);
+      const textContext: TextContext = {
+        window: context.window,
+        timestamp: context.timestamp,
+        elements: textElements,
+      };
+      writeFileSync(textContextFile, JSON.stringify(textContext, null, 2));
+    }
+
+    // Update last action with screenshot/context reference
     if (this.session.actions.length > 0) {
       const lastAction = this.session.actions[this.session.actions.length - 1];
       if (lastAction) {
         lastAction.screenshot = filepath;
+        if (uiContextPath) {
+          lastAction.context = uiContextPath;
+        }
       }
     }
 
