@@ -14,6 +14,7 @@ import { windowsCommand } from './commands/windows.js';
 import { focusCommand } from './commands/focus.js';
 import { serveCommand } from './commands/serve.js';
 import { tokensCommand } from './commands/tokens.js';
+import { gifCommand } from './commands/gif.js';
 
 export function registerCommands(program: Command): void {
   program.addCommand(initCommand());
@@ -27,4 +28,5 @@ export function registerCommands(program: Command): void {
   program.addCommand(focusCommand());
   program.addCommand(serveCommand());
   program.addCommand(tokensCommand());
+  program.addCommand(gifCommand());
 }

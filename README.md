@@ -31,11 +31,10 @@ OSbot is your fallback when traditional automation tools fail:
 
 - 🎯 **Vision-based** - Locate UI elements by description using Claude vision
 - 🔍 **UI Automation** - Get element coordinates via Windows accessibility tree
-- 🖱️ **Cross-platform** - Windows, macOS, and Linux support
-- 🔧 **CLI + MCP** - Use standalone or integrate with AI agents (12 tools)
-- 🔐 **OAuth Support** - Uses your Claude Max/Pro subscription (no API costs!)
-- ⚡ **Native Input** - Uses robotjs for reliable mouse/keyboard control
+- 🔧 **MCP Server** - Integrates with Claude Desktop, Claude Code, Cursor, Windsurf
+- ⚡ **Native Input** - Uses @nut-tree/nut-js for reliable mouse/keyboard control
 - 📸 **Multi-monitor** - Supports multiple screens with DPI awareness
+- 🪟 **Windows** - Currently tested on Windows only
 
 ## Quick Start
 
@@ -45,25 +44,19 @@ git clone https://github.com/mikealkeal/osbot.git
 cd osbot
 npm install
 npm run build
-npm link
 
-# Initialize and login
-osbot init
-osbot login
-
-# Try it out - The magic of vision-based clicking!
-osbot click "Submit button"          # Click by description - that's OSbot!
-osbot click "File menu"              # Works on any visible element
-osbot screenshot --describe          # See what Claude sees on screen
-osbot type "hello world"             # Type text anywhere
+# Start MCP server (used by Claude Desktop, Claude Code, etc.)
+node dist/bin/osbot.js serve
 ```
+
+Then configure your MCP client (see [MCP Integration](#mcp-integration) below).
 
 ## Installation
 
 ### Requirements
 
 - **Node.js 22+** (22.0.0 or higher)
-- **Claude Max or Pro subscription** (for OAuth authentication)
+- **Claude Desktop, Claude Code, or any MCP client** (provides OAuth authentication)
 
 ### From Source (Recommended)
 
@@ -72,45 +65,25 @@ git clone https://github.com/mikealkeal/osbot.git
 cd osbot
 npm install
 npm run build
-npm link
+npm link  # Optional: makes 'osbot' command available globally
 ```
 
-### Platform-Specific Setup
+### Platform Support
+
+| Platform | Status |
+| -------- | ------ |
+| Windows  | ✅ Tested |
+| macOS    | 🚧 Not tested yet |
+| Linux    | 🚧 Not tested yet |
 
 #### Windows
 
 - PowerShell (included)
 - No additional dependencies needed
 
-#### macOS
-
-- Grant accessibility permissions: **System Preferences > Security & Privacy > Accessibility**
-- Add Terminal or your shell to the allowed apps
-
-#### Linux
-
-```bash
-# Install screenshot tool (choose one)
-sudo apt install scrot           # Option 1: scrot
-sudo apt install imagemagick     # Option 2: ImageMagick
-
-# Install window manager control (optional, for focus/list windows)
-sudo apt install wmctrl
-```
-
 ## Usage
 
 ### CLI Commands
-
-#### Authentication
-
-```bash
-osbot init                    # Initialize config directory
-osbot login                   # Login with Claude (opens browser)
-osbot login --status          # Check login status
-osbot login --logout          # Logout
-osbot login --key sk-ant-xxx  # Use API key instead of OAuth
-```
 
 #### Vision-Based Clicking (The Core of OSbot!)
 
@@ -180,13 +153,52 @@ osbot type "test" --dry-run
 
 ## MCP Integration
 
-OSbot exposes tools via [Model Context Protocol](https://modelcontextprotocol.io) for AI agents like Claude Desktop.
+OSbot exposes tools via [Model Context Protocol](https://modelcontextprotocol.io) for AI agents. Works with **Claude Desktop**, **Claude Code**, **Cursor**, **Windsurf**, and any MCP-compatible client.
 
-### Configuration
+### Quick Setup
 
-Add to your MCP config file:
+#### Claude Desktop
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Edit your config file:
+
+| OS      | Config Path                                              |
+| ------- | -------------------------------------------------------- |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json`            |
+| macOS   | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+
+Add OSbot to `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "osbot": {
+      "command": "node",
+      "args": ["C:/path/to/osbot/dist/bin/osbot.js", "serve"]
+    }
+  }
+}
+```
+
+> **Tip:** Replace `C:/path/to/osbot` with your actual installation path.
+
+Then **restart Claude Desktop**. You'll see a 🔌 icon indicating MCP tools are available.
+
+#### Claude Code / Cursor / Windsurf
+
+Add a `.mcp.json` file in your project root:
+
+```json
+{
+  "mcpServers": {
+    "osbot": {
+      "command": "node",
+      "args": ["C:/path/to/osbot/dist/bin/osbot.js", "serve"]
+    }
+  }
+}
+```
+
+#### If installed globally (npm link)
 
 ```json
 {
@@ -194,19 +206,6 @@ Add to your MCP config file:
     "osbot": {
       "command": "osbot",
       "args": ["serve"]
-    }
-  }
-}
-```
-
-Or if using from source:
-
-```json
-{
-  "mcpServers": {
-    "osbot": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/osbot/bin/osbot.ts", "serve"]
     }
   }
 }
@@ -250,7 +249,6 @@ Config directory: `~/.osbot/`
 ### Files
 
 - **`config.json`** - Application settings
-- **`oauth-token.json`** - OAuth credentials (managed automatically)
 
 ### config.json
 
@@ -259,69 +257,36 @@ Config directory: `~/.osbot/`
   "defaultScreen": 0,
   "dryRun": false,
   "logLevel": "info",
-  "cursorSize": 128,
-  "model": "claude-sonnet-4-20250514",
-  "maxTokensLocate": 256,
-  "maxTokensDescribe": 1024,
-  "redirectPort": 9876
+  "cursorSize": 128
 }
 ```
 
 ### Configuration Options
 
-| Option              | Type    | Default                      | Description                                 |
-| ------------------- | ------- | ---------------------------- | ------------------------------------------- |
-| `defaultScreen`     | number  | `0`                          | Default monitor to capture                  |
-| `dryRun`            | boolean | `false`                      | Simulate actions without executing          |
-| `logLevel`          | string  | `"info"`                     | Log level: `debug`, `info`, `warn`, `error` |
-| `cursorSize`        | number  | `128`                        | Cursor size in screenshots (32-256)         |
-| `model`             | string  | `"claude-sonnet-4-20250514"` | Claude model to use                         |
-| `maxTokensLocate`   | number  | `256`                        | Max tokens for element location             |
-| `maxTokensDescribe` | number  | `1024`                       | Max tokens for screen description           |
-| `redirectPort`      | number  | `9876`                       | OAuth redirect port                         |
-
-### Environment Variables
-
-You can also use environment variables (`.env` file supported):
-
-```bash
-# Option 1: Claude OAuth token (recommended)
-CLAUDE_CODE_OAUTH_TOKEN=your-token-here
-
-# Option 2: Anthropic API key
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Other settings
-LOG_LEVEL=info
-DRY_RUN=false
-```
+| Option          | Type    | Default  | Description                                 |
+| --------------- | ------- | -------- | ------------------------------------------- |
+| `defaultScreen` | number  | `0`      | Default monitor to capture                  |
+| `dryRun`        | boolean | `false`  | Simulate actions without executing          |
+| `logLevel`      | string  | `"info"` | Log level: `debug`, `info`, `warn`, `error` |
+| `cursorSize`    | number  | `128`    | Cursor size in screenshots (32-256)         |
 
 ## How It Works
 
-OSbot uses a multi-layer approach for universal desktop automation:
+OSbot uses a multi-layer approach for desktop automation (Windows):
 
-1. **Screenshot Layer** - Captures screen using native OS tools:
-   - Windows: PowerShell + .NET System.Drawing
-   - macOS: `screencapture` command
-   - Linux: `scrot` or ImageMagick `import`
+1. **Screenshot Layer** - Captures screen using PowerShell + .NET System.Drawing
 
-2. **UI Automation Layer** (Windows) - Gets element coordinates via accessibility tree:
+2. **UI Automation Layer** - Gets element coordinates via Windows accessibility tree:
    - Uses Windows UI Automation API via PowerShell
    - Returns interactive elements with screen coordinates
    - Works like a DOM for desktop apps
 
-3. **Vision Layer** - Claude analyzes screenshots to:
-   - Locate UI elements by natural language description
-   - Describe screen content
-   - Provide coordinates for interaction
-
-4. **Input Layer** - Uses robotjs for:
+3. **Input Layer** - Uses @nut-tree/nut-js for:
    - Mouse movement and clicks
    - Keyboard input and hotkeys
-   - Cross-platform native control
    - Adapts to Windows mouse button swap settings
 
-**Best strategy**: Use `os_inspect` for precise coordinates when UI Automation works, fall back to vision-based analysis for canvas apps, games, or legacy software.
+**Best strategy**: Use `os_screenshot` which returns UI elements with coordinates, then `os_move` + `os_click` for precise interaction.
 
 ## Development
 
@@ -354,8 +319,6 @@ osbot/
 ├── src/
 │   ├── core/
 │   │   ├── screenshot.ts     # Multi-platform screen capture
-│   │   ├── auth.ts           # OAuth 2.0 + PKCE authentication
-│   │   ├── vision.ts         # Claude API integration
 │   │   ├── input.ts          # Mouse/keyboard control (robotjs)
 │   │   ├── windows.ts        # Window management
 │   │   └── uiautomation.ts   # Windows UI Automation (accessibility)
@@ -386,75 +349,32 @@ osbot/
 
 ## Troubleshooting
 
+### MCP Server Issues
+
+**Server not starting:**
+
+- Check Node.js version: `node --version` (requires 22+)
+- Rebuild if needed: `npm run build`
+- Check path in your MCP config file
+
+**Tools not appearing in Claude Desktop:**
+
+- Restart Claude Desktop after config changes
+- Check `claude_desktop_config.json` syntax (valid JSON)
+- Look for 🔌 icon in Claude Desktop interface
+
 ### Windows Issues
-
-**Screenshot not capturing cursor:**
-
-- Adjust `cursorSize` in config.json (32-256)
-- Larger cursors are easier for AI to detect
 
 **Clicks not working:**
 
 - OSbot auto-detects swapped mouse buttons
 - No manual configuration needed
 
-### macOS Issues
+**UI elements not detected:**
 
-**"Accessibility permissions required":**
-
-1. Open System Preferences > Security & Privacy > Accessibility
-2. Add Terminal or your shell to the list
-3. Restart the terminal
-
-**Screenshot not working:**
-
-- `screencapture` is built-in, should work out of the box
-- Check privacy settings if denied
-
-### Linux Issues
-
-**Screenshot fails:**
-
-```bash
-# Install one of these
-sudo apt install scrot           # Recommended
-sudo apt install imagemagick
-```
-
-**Window focus/list not working:**
-
-```bash
-sudo apt install wmctrl
-```
-
-### Authentication Issues
-
-**OAuth flow times out:**
-
-- Check firewall isn't blocking port 9876
-- Change port in `~/.osbot/config.json` if needed
-- Try `osbot login --key sk-ant-xxx` as fallback
-
-**"Not authenticated" errors:**
-
-```bash
-osbot login --status    # Check status
-osbot login --logout    # Clear credentials
-osbot login             # Re-authenticate
-```
-
-### Vision/API Issues
-
-**"Element not found":**
-
-- Be more specific in descriptions
-- Try `osbot screenshot --describe` to see what Claude sees
-- Ensure element is visible on screen
-
-**Rate limiting:**
-
-- Wait a few moments between requests
-- Consider using API key for higher limits
+- Some apps don't expose UI Automation elements
+- Use `os_screenshot` to see what's visible
+- Coordinates are returned in the screenshot response
 
 ## License
 
