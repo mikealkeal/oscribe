@@ -385,20 +385,16 @@ export async function findElement(
   );
 
   // Then by automationId
-  if (!found) {
-    found = tree.elements.find(
-      (el) => el.automationId?.toLowerCase().includes(targetLower)
-    );
-  }
+  found ??= tree.elements.find(
+    (el) => el.automationId?.toLowerCase().includes(targetLower)
+  );
 
   // Then by description
-  if (!found) {
-    found = tree.elements.find(
-      (el) => el.description?.toLowerCase().includes(targetLower)
-    );
-  }
+  found ??= tree.elements.find(
+    (el) => el.description?.toLowerCase().includes(targetLower)
+  );
 
-  return found || null;
+  return found ?? null;
 }
 
 /**

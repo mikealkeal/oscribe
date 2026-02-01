@@ -6,7 +6,7 @@
 import robot from 'robotjs';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { withLogging, withLoggingSync } from './logger.js';
+import { withLogging } from './logger.js';
 import { checkRestrictions } from './security.js';
 import { checkUserActivity, recordActionDone } from './killswitch.js';
 

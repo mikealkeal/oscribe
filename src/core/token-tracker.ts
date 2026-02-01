@@ -134,9 +134,7 @@ export function recordTokenUsage(
   sessionStats.callCount += 1;
 
   // Track by action type
-  if (!sessionStats.byAction[action]) {
-    sessionStats.byAction[action] = { calls: 0, tokens: 0, cost: 0 };
-  }
+  sessionStats.byAction[action] ??= { calls: 0, tokens: 0, cost: 0 };
   sessionStats.byAction[action].calls += 1;
   sessionStats.byAction[action].tokens += usage.inputTokens + usage.outputTokens;
   sessionStats.byAction[action].cost += cost;

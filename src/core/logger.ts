@@ -16,7 +16,7 @@ export interface ActionEvent {
   duration_ms: number;
   success: boolean;
   error?: { message: string; code: string | undefined };
-  platform: NodeJS.Platform;
+  platform: typeof process.platform;
 }
 
 const LOGS_DIR = join(homedir(), '.osbot', 'logs');

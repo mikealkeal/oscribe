@@ -74,9 +74,7 @@ export class SessionRecorder {
     const config = loadConfig();
 
     // Use configured session dir or default to ~/.osbot/sessions
-    const baseDir = config.sessionDir
-      ? config.sessionDir
-      : join(homedir(), '.osbot', 'sessions');
+    const baseDir = config.sessionDir ?? join(homedir(), '.osbot', 'sessions');
 
     this.sessionDir = join(baseDir, sessionId);
     this.screenshotDir = join(this.sessionDir, 'screenshots');
@@ -158,7 +156,7 @@ export class SessionRecorder {
    */
   saveScreenshot(screenshotBase64: string, label?: string, context?: ScreenContext): string {
     const index = this.session.screenshots.length;
-    const filename = `${index}_${label || 'screenshot'}.png`;
+    const filename = `${index}_${label ?? 'screenshot'}.png`;
     const filepath = join(this.screenshotDir, filename);
 
     // Save screenshot
@@ -243,7 +241,7 @@ export class SessionRecorder {
     let report = `# Session Report\n\n`;
     report += `**Session ID:** ${this.session.id}\n\n`;
     report += `**Start:** ${this.session.startTime}\n`;
-    report += `**End:** ${this.session.endTime || 'In progress'}\n`;
+    report += `**End:** ${this.session.endTime ?? 'In progress'}\n`;
     report += `**Duration:** ${(duration / 1000).toFixed(2)}s\n\n`;
     report += `---\n\n`;
     report += `## Initial Request\n\n`;

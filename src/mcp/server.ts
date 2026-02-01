@@ -18,7 +18,7 @@ import { listWindows, focusWindow } from '../core/windows.js';
 import { getUIElements, getElementAtPoint } from '../core/uiautomation.js';
 import { RestrictedActionError } from '../core/security.js';
 import { UserInterruptError } from '../core/killswitch.js';
-import { SessionRecorder, ScreenContext } from '../core/session-recorder.js';
+import { SessionRecorder, ScreenContext, UIElementContext } from '../core/session-recorder.js';
 
 // Get version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -87,9 +87,7 @@ const InspectPointSchema = z.object({
 let sessionRecorder: SessionRecorder | null = null;
 
 function getRecorder(): SessionRecorder {
-  if (!sessionRecorder) {
-    sessionRecorder = new SessionRecorder('MCP Session');
-  }
+  sessionRecorder ??= new SessionRecorder('MCP Session');
   return sessionRecorder;
 }
 
@@ -328,7 +326,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const tree = await getUIElements();
 
         // Helper to format element with centered coordinates
-        const formatElement = (el: typeof tree.ui[0]) => ({
+        const formatElement = (el: typeof tree.ui[0]): UIElementContext => ({
           type: el.type,
           ...(el.name ? { name: el.name } : {}),
           x: el.x,
