@@ -32,7 +32,7 @@ OSbot is your fallback when traditional automation tools fail:
 - 🎯 **Vision-based** - Locate UI elements by description using Claude vision
 - 🔍 **UI Automation** - Get element coordinates via Windows accessibility tree
 - 🔧 **MCP Server** - Integrates with Claude Desktop, Claude Code, Cursor, Windsurf
-- ⚡ **Native Input** - Uses @nut-tree/nut-js for reliable mouse/keyboard control
+- ⚡ **Native Input** - Uses robotjs for reliable mouse/keyboard control
 - 📸 **Multi-monitor** - Supports multiple screens with DPI awareness
 - 🪟 **Windows** - Currently tested on Windows only
 
@@ -281,7 +281,7 @@ OSbot uses a multi-layer approach for desktop automation (Windows):
    - Returns interactive elements with screen coordinates
    - Works like a DOM for desktop apps
 
-3. **Input Layer** - Uses @nut-tree/nut-js for:
+3. **Input Layer** - Uses robotjs for:
    - Mouse movement and clicks
    - Keyboard input and hotkeys
    - Adapts to Windows mouse button swap settings
@@ -382,8 +382,8 @@ osbot/
 
 - ✅ **Free** for personal use
 - ✅ **Free** for open-source projects
-- ⚠️ **Commercial use** requires a license after 4 years
-- 🔄 Automatically converts to **MIT** after 4 years (2029-01-30)
+- ⚠️ **Commercial use** requires a paid license (until 2029)
+- 🔄 Converts to **MIT** on 2029-01-30 (then free for everyone)
 
 See [LICENSE](LICENSE) for full terms.
 
@@ -423,6 +423,16 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - [ ] Plugin system for custom tools
 - [ ] Docker container distribution
 
+## Acknowledgements
+
+OSbot is built on top of these great open-source projects:
+
+- [robotjs](https://github.com/octalmage/robotjs) - Native mouse/keyboard control
+- [screenshot-desktop](https://github.com/nicholasserra/screenshot-desktop) - Cross-platform screen capture
+- [@anthropic-ai/sdk](https://github.com/anthropics/anthropic-sdk-typescript) - Claude API client
+- [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) - MCP server framework
+- [ffmpeg](https://ffmpeg.org/) - GIF generation (optional, external)
+
 ---
 
-**Built with [Claude](https://claude.ai) • Powered by [robotjs](https://github.com/octalmage/robotjs) • MCP-enabled**
+**Maintained by [Mickaël Bellun](https://bellun.fr)**
