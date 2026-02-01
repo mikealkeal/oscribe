@@ -41,6 +41,13 @@ const KillSwitchSchema = z.object({
   cooldownMs: z.number().min(0).max(5000).default(500),       // ms after our action
 });
 
+// NVDA screen reader settings (Windows only)
+const NvdaSchema = z.object({
+  autoDownload: z.boolean().default(false),  // Don't download without consent
+  autoStart: z.boolean().default(true),      // Start NVDA when Electron app detected
+  customPath: z.string().optional(),         // Custom NVDA installation path
+});
+
 export const ConfigSchema = z.object({
   apiKey: z.string().optional(),
   defaultScreen: z.number().default(0),
@@ -61,6 +68,8 @@ export const ConfigSchema = z.object({
   // Security
   restrictedMode: RestrictedModeSchema.default({}),
   killSwitch: KillSwitchSchema.default({}),
+  // NVDA (Windows Electron accessibility)
+  nvda: NvdaSchema.default({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -93,6 +102,10 @@ const DEFAULT_CONFIG: Config = {
     enabled: true,
     movementThreshold: 50,
     cooldownMs: 500,
+  },
+  nvda: {
+    autoDownload: false,
+    autoStart: true,
   },
 };
 

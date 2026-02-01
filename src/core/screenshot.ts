@@ -52,9 +52,16 @@ export async function captureScreen(options: ScreenshotOptions = {}): Promise<Sc
 
     const buffer = await readFile(tempFile);
 
+    // Extract dimensions from PNG header (IHDR chunk)
+    // PNG structure: 8-byte signature + 4-byte length + 4-byte "IHDR" + 4-byte width + 4-byte height
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+
     return {
       buffer,
       base64: buffer.toString('base64'),
+      width,
+      height,
     };
   } finally {
     // Cleanup temp file

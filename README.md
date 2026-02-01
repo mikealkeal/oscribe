@@ -1,30 +1,36 @@
 # OSbot
 
-> Vision-based desktop automation CLI and MCP server. Control any application via screenshot + AI vision, without APIs or UI Automation.
+> Vision-based desktop automation MCP server. Control any application via screenshot + AI vision.
 
-[![CI](https://github.com/mikealkeal/osbot/workflows/CI/badge.svg)](https://github.com/mikealkeal/osbot/actions/workflows/ci.yml)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
+[![Windows](https://img.shields.io/badge/platform-Windows-0078D6)](https://github.com/mikealkeal/osbot)
 
-**OSbot** is a universal fallback for desktop automation when APIs and accessibility frameworks don't work. It uses AI vision (Claude) to understand what's on screen and native OS controls to interact with it.
+<!-- Demo GIF placeholder - replace with actual demo -->
+<!-- ![OSbot Demo](assets/demo.gif) -->
+
+## Table of Contents
+
+- [Why OSbot?](#why-osbot)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [MCP Integration](#mcp-integration)
+- [How It Works](#how-it-works)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
 
 ## Why OSbot?
 
 > **"If you can see it, OSbot can click it."**
-
-| Tool              | Approach               | Limitation                                          |
-| ----------------- | ---------------------- | --------------------------------------------------- |
-| **APIs/CLI**      | Direct integration     | No API = stuck. App must expose programmatic access |
-| **UI Automation** | DOM/Accessibility tree | App must expose UI elements. Fails on canvas/games  |
-| **OSbot**         | Vision + AI            | **Works on anything visible on screen**             |
 
 OSbot is your fallback when traditional automation tools fail:
 
 - **Legacy apps** without APIs
 - **Games and canvas apps** without DOM
 - **Third-party software** you can't modify
-- **Cross-platform testing** without platform-specific tools
 - **Ad-hoc automation** without infrastructure setup
 
 ## Features
@@ -35,6 +41,7 @@ OSbot is your fallback when traditional automation tools fail:
 - ⚡ **Native Input** - Uses robotjs for reliable mouse/keyboard control
 - 📸 **Multi-monitor** - Supports multiple screens with DPI awareness
 - 🪟 **Windows** - Currently tested on Windows only
+- ⚛️ **Electron Support** - Full UI element detection in Electron apps (via NVDA)
 
 ## Quick Start
 
@@ -227,6 +234,10 @@ Add a `.mcp.json` file in your project root:
 | `os_windows`     | List open windows + screens                            | -                                  |
 | `os_focus`       | Focus window by name                                   | `window`                           |
 | `os_wait`        | Wait for duration (UI loading)                         | `ms` (max 30000)                   |
+| `os_nvda_status` | Check NVDA screen reader status (Electron support)     | -                                  |
+| `os_nvda_install`| Download NVDA portable for Electron apps               | -                                  |
+| `os_nvda_start`  | Start NVDA in silent mode                              | -                                  |
+| `os_nvda_stop`   | Stop NVDA screen reader                                | -                                  |
 
 ### MCP Usage Example
 
@@ -269,6 +280,9 @@ Config directory: `~/.osbot/`
 | `dryRun`        | boolean | `false`  | Simulate actions without executing          |
 | `logLevel`      | string  | `"info"` | Log level: `debug`, `info`, `warn`, `error` |
 | `cursorSize`    | number  | `128`    | Cursor size in screenshots (32-256)         |
+| `nvda.autoDownload` | boolean | `false` | Auto-download NVDA when needed           |
+| `nvda.autoStart`    | boolean | `true`  | Auto-start NVDA for Electron apps        |
+| `nvda.customPath`   | string  | -       | Custom NVDA installation path            |
 
 ## How It Works
 
@@ -375,6 +389,34 @@ osbot/
 - Some apps don't expose UI Automation elements
 - Use `os_screenshot` to see what's visible
 - Coordinates are returned in the screenshot response
+
+**Electron apps showing few UI elements:**
+
+Electron/Chromium apps require NVDA screen reader to expose their full accessibility tree:
+
+```bash
+# Install NVDA portable (one-time)
+osbot nvda install
+
+# Start NVDA silently (no audio)
+osbot nvda start
+```
+
+Or via MCP tools: `os_nvda_install` → `os_nvda_start`
+
+NVDA runs in silent mode (no speech, no sounds). The agent will prompt to install NVDA when needed.
+
+**Manual NVDA installation:**
+
+If you prefer to install NVDA yourself, download from [nvaccess.org](https://www.nvaccess.org/download/) and set the path in config:
+
+```json
+{
+  "nvda": {
+    "customPath": "C:/Program Files/NVDA"
+  }
+}
+```
 
 ## License
 

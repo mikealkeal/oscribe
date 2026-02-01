@@ -15,10 +15,59 @@ import { fileURLToPath } from 'node:url';
 import { captureScreen, listScreens } from '../core/screenshot.js';
 import { click, typeText, hotkey, scroll, moveMouse, getMousePosition, clickAtCurrentPosition } from '../core/input.js';
 import { listWindows, focusWindow } from '../core/windows.js';
-import { getUIElements, getElementAtPoint } from '../core/uiautomation.js';
+import { getUIElements, getElementAtPoint, findSystemUIElements, getTaskbarConfig } from '../core/uiautomation.js';
+import { isNvdaInstalled, isNvdaRunning, initNvda, startNvda, stopNvda, getNvdaStatus } from '../core/nvda.js';
 import { RestrictedActionError } from '../core/security.js';
 import { UserInterruptError } from '../core/killswitch.js';
 import { SessionRecorder, ScreenContext, UIElementContext } from '../core/session-recorder.js';
+
+// Known client image size limits for calculating resize ratio
+// When models receive images larger than their limit, they resize them
+interface ClientImageLimit {
+  maxLongEdge: number;
+  name: string;
+}
+
+const CLIENT_IMAGE_LIMITS: Record<string, ClientImageLimit> = {
+  // Claude models (Claude Desktop, Claude Code, etc.)
+  claude: { maxLongEdge: 1568, name: 'Claude' },
+  anthropic: { maxLongEdge: 1568, name: 'Claude' },
+  // OpenAI models
+  openai: { maxLongEdge: 2048, name: 'GPT-4V' },
+  // Google models
+  gemini: { maxLongEdge: 3072, name: 'Gemini' },
+  google: { maxLongEdge: 3072, name: 'Gemini' },
+  // Default fallback (conservative estimate)
+  default: { maxLongEdge: 1568, name: 'Unknown' },
+};
+
+/**
+ * Calculate image resize ratio based on client
+ * Models resize images when the long edge exceeds their limit
+ */
+function calculateImageRatio(width: number, height: number, clientName?: string): { ratio: number; clientType: string } {
+  const longEdge = Math.max(width, height);
+  const defaultLimit: ClientImageLimit = { maxLongEdge: 1568, name: 'Unknown' };
+
+  // Try to match client name to known limits
+  let clientLimit: ClientImageLimit = defaultLimit;
+  if (clientName) {
+    const lowerName = clientName.toLowerCase();
+    for (const [key, limit] of Object.entries(CLIENT_IMAGE_LIMITS)) {
+      if (key !== 'default' && lowerName.includes(key)) {
+        clientLimit = limit;
+        break;
+      }
+    }
+  }
+
+  // If image is larger than limit, calculate resize ratio
+  const ratio = longEdge > clientLimit.maxLongEdge
+    ? longEdge / clientLimit.maxLongEdge
+    : 1;
+
+  return { ratio, clientType: clientLimit.name };
+}
 
 // Get version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -225,6 +274,46 @@ Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x
           required: ['x', 'y'],
         },
       },
+      {
+        name: 'os_system_ui',
+        description: 'Get all Windows system UI elements (taskbar, Start button, system tray, desktop icons, action center, widgets). Use this to interact with OS-level UI independently of application windows. Returns clickable coordinates for all system elements.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'os_nvda_status',
+        description: 'Check NVDA screen reader status (Windows only). NVDA is needed for Electron app accessibility.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'os_nvda_install',
+        description: 'Download and install NVDA portable for Electron app accessibility. Windows only.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'os_nvda_start',
+        description: 'Start NVDA screen reader in silent mode. Required for Electron app accessibility. Windows only.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'os_nvda_stop',
+        description: 'Stop NVDA screen reader. Windows only.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
     ],
   };
 });
@@ -322,8 +411,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const screenshot = await captureScreen({ screen });
         const cursor = getMousePosition();
 
+        // Get screenshot dimensions and calculate resize ratio for the client
+        const width = screenshot.width ?? 0;
+        const height = screenshot.height ?? 0;
+        const clientVersion = server.getClientVersion();
+        const { ratio, clientType } = calculateImageRatio(width, height, clientVersion?.name);
+
         // Get UI elements from focused window
         const tree = await getUIElements();
+
+        // On Windows, always get system UI elements (taskbar, etc.)
+        // Even if hidden (auto-hide), agent can move mouse to edge to reveal it
+        // Skip if desktop is already active (getUIElements already returns taskbar)
+        let systemElements: typeof tree.ui = [];
+        let taskbarInfo = '';
+        if (process.platform === 'win32' && tree.windowClass !== 'Shell_TrayWnd') {
+          const taskbarConfig = await getTaskbarConfig();
+          const sysElements = await findSystemUIElements();
+          // Filter to only interactive elements (buttons mainly)
+          systemElements = sysElements.filter((el) =>
+            el.type === 'Button' && el.name && !(el as { source?: string }).source?.includes('Progman')
+          );
+
+          if (taskbarConfig.visible) {
+            taskbarInfo = `\n📌 Taskbar: ${taskbarConfig.position}`;
+          } else {
+            taskbarInfo = `\n📌 Taskbar: ${taskbarConfig.position} (hidden - move mouse to ${taskbarConfig.position} edge to reveal)`;
+          }
+        } else if (process.platform === 'win32') {
+          // Desktop active - taskbar already included in tree.ui
+          taskbarInfo = `\n📌 Taskbar: active (desktop focused)`;
+        }
 
         // Helper to format element with centered coordinates
         const formatElement = (el: typeof tree.ui[0]): UIElementContext => ({
@@ -345,7 +463,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           window: tree.window,
           cursor: { x: cursor.x, y: cursor.y },
           timestamp: new Date().toISOString(),
-          elements: tree.elements.map(formatElement),
+          elements: [...tree.elements, ...systemElements].map(formatElement),
         };
 
         // Save screenshot + full context to session
@@ -360,14 +478,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return `- ${el.type}: "${el.name}" pos=(${el.x},${el.y}) center=(${cx},${cy}) [${el.width}x${el.height}]${el.value ? ` value="${el.value}"` : ''}${el.automationId ? ` id="${el.automationId}"` : ''}`;
         }).join('\n');
 
-        // Return: 1) Instructions, 2) JSON with coordinates, 3) Image for visual context
+        // Format system UI elements (taskbar buttons)
+        const systemText = systemElements.length > 0
+          ? `\n\n🖥️ System UI (${systemElements.length}):\n` + systemElements.map((el) => {
+              const cx = el.x + Math.floor(el.width / 2);
+              const cy = el.y + Math.floor(el.height / 2);
+              return `- ${el.type}: "${el.name}" center=(${cx},${cy}) [${el.width}x${el.height}]${el.automationId ? ` id="${el.automationId}"` : ''}`;
+            }).join('\n')
+          : '';
+
+        // Build image info section with dimensions and ratio
+        const imageInfo = `📐 Screenshot: ${width}x${height} | Client: ${clientType} | Ratio: ${ratio.toFixed(3)}${taskbarInfo}`;
+        const ratioHint = ratio > 1
+          ? `⚠️ Image resized by client. For visual estimates, multiply coordinates by ${ratio.toFixed(3)}`
+          : `✓ Image at full resolution (no resize)`;
+
+        // Check if this looks like an Electron app with limited accessibility
+        // Only warn if NVDA is not installed (if installed, it auto-starts)
+        let nvdaWarning = '';
+        if (process.platform === 'win32' &&
+            (tree.strategy === 'electron' || tree.windowClass.includes('Chrome_WidgetWin')) &&
+            tree.ui.length < 10 &&
+            !isNvdaInstalled()) {
+          nvdaWarning = '⚠️ ELECTRON APP DETECTED - NVDA not installed. Run os_nvda_install then os_nvda_start to see all UI elements.';
+        }
+
+        // Return: 1) NVDA warning FIRST if needed, 2) Window name, 3) Image info, 4) Instructions, 5) Elements, 6) Image
+        const capturedWindow = `📸 Captured window: "${tree.window}"`;
+        const focusReminder = `→ If this is not the intended window, use os_focus("App Name") first, then take another screenshot.`;
         const instruction = `⚠️ IMPORTANT: To click on elements, use center=(x,y) coordinates from the Elements list below with os_click_at(x, y). Do NOT estimate positions from the image.`;
+
+        // Put NVDA warning FIRST if Electron app detected without NVDA
+        const nvdaFirst = nvdaWarning ? `${nvdaWarning.trim()}\n\n` : '';
 
         return {
           content: [
             {
               type: 'text',
-              text: `${instruction}\n\nCursor position: (${cursor.x}, ${cursor.y})\n\nWindow: ${tree.window}\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}`,
+              text: `${nvdaFirst}${capturedWindow}\n${focusReminder}\n\n${imageInfo}\n${ratioHint}\n\n${instruction}\n\nCursor position: (${cursor.x}, ${cursor.y})\n\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}${systemText}`,
             },
             {
               type: 'image',
@@ -485,6 +633,138 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: `Element at (${x}, ${y}):\n- Type: ${element.type}\n- Name: "${element.name}"\n- Center: (${center.x}, ${center.y})\n- Bounds: ${element.x},${element.y} ${element.width}x${element.height}\n- Enabled: ${element.isEnabled}${element.automationId ? `\n- AutomationId: ${element.automationId}` : ''}`,
             },
           ],
+        };
+      }
+
+      case 'os_system_ui': {
+        const elements = await findSystemUIElements();
+
+        if (elements.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No system UI elements found. Make sure the desktop or taskbar is visible.',
+              },
+            ],
+          };
+        }
+
+        // Format elements with center coordinates for clicking
+        const elementsText = elements.map((el) => {
+          const cx = el.x + Math.floor(el.width / 2);
+          const cy = el.y + Math.floor(el.height / 2);
+          const source = (el as { source?: string }).source || 'unknown';
+          return `- ${el.type}: "${el.name}" center=(${cx},${cy}) [${el.width}x${el.height}] source=${source}${el.automationId ? ` id="${el.automationId}"` : ''}`;
+        }).join('\n');
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `🖥️ Windows System UI Elements (${elements.length}):\n\n⚠️ Use center=(x,y) coordinates with os_click_at(x, y) to click on elements.\n\n${elementsText}`,
+            },
+          ],
+        };
+      }
+
+      case 'os_nvda_status': {
+        if (process.platform !== 'win32') {
+          return {
+            content: [{ type: 'text', text: 'NVDA is only available on Windows.' }],
+          };
+        }
+
+        const status = await getNvdaStatus();
+        const statusText = status.installed
+          ? status.running
+            ? '✅ NVDA is running - Electron accessibility enabled'
+            : '⚠️ NVDA installed but not running. Use os_nvda_start to enable Electron accessibility.'
+          : '❌ NVDA not installed. Use os_nvda_install to enable Electron accessibility.';
+
+        return {
+          content: [{
+            type: 'text',
+            text: `NVDA Status:\n- Installed: ${status.installed ? 'Yes' : 'No'}\n- Running: ${status.running ? 'Yes' : 'No'}\n- Config: ${status.configValid ? 'Valid' : 'Not configured'}\n\n${statusText}`,
+          }],
+        };
+      }
+
+      case 'os_nvda_install': {
+        if (process.platform !== 'win32') {
+          return {
+            content: [{ type: 'text', text: 'NVDA is only available on Windows.' }],
+          };
+        }
+
+        if (isNvdaInstalled()) {
+          return {
+            content: [{ type: 'text', text: '✅ NVDA is already installed. Use os_nvda_start to run it.' }],
+          };
+        }
+
+        const success = await initNvda(true); // forceDownload=true
+
+        return {
+          content: [{
+            type: 'text',
+            text: success
+              ? '✅ NVDA portable installed successfully. Use os_nvda_start to enable Electron accessibility.'
+              : '❌ Failed to install NVDA. Check network connection and try again.',
+          }],
+          isError: !success,
+        };
+      }
+
+      case 'os_nvda_start': {
+        if (process.platform !== 'win32') {
+          return {
+            content: [{ type: 'text', text: 'NVDA is only available on Windows.' }],
+          };
+        }
+
+        const running = await isNvdaRunning();
+        if (running) {
+          return {
+            content: [{ type: 'text', text: '✅ NVDA is already running.' }],
+          };
+        }
+
+        if (!isNvdaInstalled()) {
+          return {
+            content: [{ type: 'text', text: '❌ NVDA not installed. Use os_nvda_install first.' }],
+            isError: true,
+          };
+        }
+
+        const success = await startNvda(false);
+
+        return {
+          content: [{
+            type: 'text',
+            text: success
+              ? '✅ NVDA started in silent mode. Electron apps will now expose their full UI tree.'
+              : '❌ Failed to start NVDA.',
+          }],
+          isError: !success,
+        };
+      }
+
+      case 'os_nvda_stop': {
+        if (process.platform !== 'win32') {
+          return {
+            content: [{ type: 'text', text: 'NVDA is only available on Windows.' }],
+          };
+        }
+
+        const success = await stopNvda();
+
+        return {
+          content: [{
+            type: 'text',
+            text: success ? '✅ NVDA stopped.' : '❌ Failed to stop NVDA.',
+          }],
+          isError: !success,
         };
       }
 

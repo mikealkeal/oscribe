@@ -3,14 +3,16 @@
  * Auto-detects window type and applies the right strategy:
  * - Native: standard UI Automation on window
  * - WebView2/Electron: search for Document elements globally
+ * - MSAA fallback: use IAccessible for Electron apps when UIA fails
  */
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import { ensureNvdaForElectron, isNvdaRunning } from './nvda.js';
 
 const execAsync = promisify(exec);
 
@@ -103,6 +105,7 @@ function detectStrategy(windowClass: string): 'native' | 'webview2' | 'electron'
 
 /**
  * Get UI elements - auto-detects strategy based on window type
+ * When no window is focused (desktop active), returns taskbar elements
  */
 export async function getUIElements(windowTitle?: string): Promise<UITree> {
   if (process.platform !== 'win32') {
@@ -111,9 +114,35 @@ export async function getUIElements(windowTitle?: string): Promise<UITree> {
 
   // Step 1: Get window info and detect strategy
   const windowInfo = await getWindowInfo(windowTitle);
+
+  // Step 2: Check if desktop is active (no window focused)
+  // Desktop classes: Progman, WorkerW, or empty
+  const isDesktopActive = !windowInfo.name ||
+    windowInfo.className === 'Progman' ||
+    windowInfo.className === 'WorkerW' ||
+    windowInfo.className === '';
+
+  if (isDesktopActive && !windowTitle) {
+    // Desktop active - capture taskbar elements
+    const taskbarElements = await findTaskbarElements();
+
+    const ui = taskbarElements.filter((el) => el.type !== 'Text' && el.type !== 'Image');
+    const content = taskbarElements.filter((el) => el.type === 'Text');
+
+    return {
+      window: 'Windows Taskbar',
+      windowClass: 'Shell_TrayWnd',
+      strategy: 'native',
+      elements: taskbarElements,
+      ui,
+      content,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   const strategy = detectStrategy(windowInfo.className);
 
-  // Step 2: Apply the right strategy
+  // Step 3: Apply the right strategy
   let elements: UIElement[] = [];
 
   if (strategy === 'webview2' || strategy === 'electron') {
@@ -123,6 +152,19 @@ export async function getUIElements(windowTitle?: string): Promise<UITree> {
     // Fallback to native if no document found
     if (elements.length === 0) {
       elements = await findNativeElements(windowInfo.name);
+    }
+
+    // MSAA fallback for Electron apps when UIA finds too few elements
+    // Electron apps often don't expose their accessibility tree via UIA
+    // NVDA must be running to trigger Chromium's accessibility tree
+    if (elements.length < 10) {
+      // Ensure NVDA is running for Electron accessibility
+      await ensureNvdaForElectron();
+
+      const msaaElements = await findMsaaElements(windowInfo.name);
+      if (msaaElements.length > elements.length) {
+        elements = msaaElements;
+      }
     }
   } else {
     // Native strategy
@@ -366,6 +408,256 @@ $elements | ConvertTo-Json -Depth 2 -Compress
     return [];
   } finally {
     try { unlinkSync(scriptPath); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Taskbar configuration on Windows
+ */
+export interface TaskbarConfig {
+  position: 'bottom' | 'top' | 'left' | 'right';
+  autoHide: boolean;
+  visible: boolean;
+}
+
+/**
+ * Get Windows taskbar configuration (position, auto-hide, visibility)
+ */
+export async function getTaskbarConfig(): Promise<TaskbarConfig> {
+  if (process.platform !== 'win32') {
+    return { position: 'bottom', autoHide: false, visible: true };
+  }
+
+  const psScript = `
+Add-Type -AssemblyName UIAutomationClient;
+$root = [System.Windows.Automation.AutomationElement]::RootElement;
+
+# Find taskbar
+$condition = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::ClassNameProperty, "Shell_TrayWnd"
+);
+$taskbar = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $condition);
+
+$result = @{ position = "bottom"; autoHide = $false; visible = $true }
+
+if ($taskbar) {
+    $rect = $taskbar.Current.BoundingRectangle;
+
+    # Check visibility (if Y > screen height, it's hidden)
+    Add-Type -AssemblyName System.Windows.Forms
+    $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+
+    # Determine position based on taskbar bounds
+    if ($rect.Width -gt $rect.Height) {
+        # Horizontal taskbar (top or bottom)
+        if ($rect.Y -lt $screen.Height / 2) {
+            $result.position = "top"
+        } else {
+            $result.position = "bottom"
+        }
+    } else {
+        # Vertical taskbar (left or right)
+        if ($rect.X -lt $screen.Width / 2) {
+            $result.position = "left"
+        } else {
+            $result.position = "right"
+        }
+    }
+
+    # Check if auto-hide is enabled (taskbar mostly off-screen)
+    if ($result.position -eq "bottom" -and $rect.Y -ge $screen.Height - 5) {
+        $result.autoHide = $true
+        $result.visible = $false
+    } elseif ($result.position -eq "top" -and $rect.Y -le -$rect.Height + 5) {
+        $result.autoHide = $true
+        $result.visible = $false
+    } elseif ($result.position -eq "left" -and $rect.X -le -$rect.Width + 5) {
+        $result.autoHide = $true
+        $result.visible = $false
+    } elseif ($result.position -eq "right" -and $rect.X -ge $screen.Width - 5) {
+        $result.autoHide = $true
+        $result.visible = $false
+    }
+}
+
+$result | ConvertTo-Json -Compress
+`;
+
+  try {
+    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
+    const { stdout } = await execAsync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
+      { timeout: 5000 }
+    );
+
+    return JSON.parse(stdout.trim()) as TaskbarConfig;
+  } catch {
+    return { position: 'bottom', autoHide: false, visible: true };
+  }
+}
+
+/**
+ * Find Windows system UI elements (taskbar, desktop, start menu, system tray, etc.)
+ * Captures all OS-level UI elements, not just application windows
+ */
+export async function findSystemUIElements(): Promise<UIElement[]> {
+  const psScript = `
+Add-Type -AssemblyName UIAutomationClient;
+$root = [System.Windows.Automation.AutomationElement]::RootElement;
+$elements = @();
+$walker = [System.Windows.Automation.TreeWalker]::RawViewWalker;
+
+# System window classes to capture
+$systemClasses = @(
+    "Shell_TrayWnd",      # Taskbar
+    "Shell_SecondaryTrayWnd", # Secondary taskbar (multi-monitor)
+    "Progman",            # Desktop
+    "WorkerW",            # Desktop worker
+    "Windows.UI.Core.CoreWindow", # Start menu, Action center, etc.
+    "NotifyIconOverflowWindow", # System tray overflow
+    "TopLevelWindowForOverflowXamlIsland" # Windows 11 widgets
+)
+
+function Walk-Element {
+    param($el, $depth, $source)
+    if ($depth -gt 20) { return }
+
+    try {
+        $rect = $el.Current.BoundingRectangle;
+        $name = $el.Current.Name;
+        $type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", "";
+        $autoId = $el.Current.AutomationId;
+        $className = $el.Current.ClassName;
+
+        if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [System.Double]::IsInfinity($rect.X)) {
+            # Include interactive elements
+            if ($name -or $type -eq "Button" -or $type -eq "MenuItem" -or $type -eq "ListItem" -or $autoId) {
+                $script:elements += @{
+                    type = $type;
+                    name = if ($name) { $name } else { $autoId };
+                    description = $el.Current.HelpText;
+                    automationId = $autoId;
+                    source = $source;
+                    x = [int]$rect.X; y = [int]$rect.Y;
+                    width = [int]$rect.Width; height = [int]$rect.Height;
+                    isEnabled = $el.Current.IsEnabled
+                }
+            }
+        }
+
+        $child = $walker.GetFirstChild($el);
+        while ($child) {
+            Walk-Element $child ($depth + 1) $source;
+            $child = $walker.GetNextSibling($child);
+        }
+    } catch {}
+}
+
+# Find and walk all system windows
+foreach ($className in $systemClasses) {
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ClassNameProperty, $className
+    );
+    $systemWindows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $condition);
+    foreach ($sysWin in $systemWindows) {
+        Walk-Element $sysWin 0 $className;
+    }
+}
+
+if ($elements.Count -eq 0) { Write-Output '[]'; exit; }
+$elements | ConvertTo-Json -Depth 2 -Compress
+`;
+
+  try {
+    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
+    const { stdout } = await execAsync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
+      { maxBuffer: 10 * 1024 * 1024, timeout: 15000 }
+    );
+
+    const result = stdout.trim();
+    if (!result || result === '[]') return [];
+
+    const parsed = JSON.parse(result);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+}
+
+// Keep backward compatibility
+async function findTaskbarElements(): Promise<UIElement[]> {
+  return findSystemUIElements();
+}
+
+/**
+ * Find elements using MSAA (IAccessible) - fallback for Electron apps
+ * Uses MsaaReader.exe to access the accessibility tree via COM
+ *
+ * Why MSAA works when UIA doesn't:
+ * - Electron/Chromium uses IAccessible2 for accessibility on Windows
+ * - Windows can convert IAccessible2 → UIA but it doesn't always work
+ * - MSAA (IAccessible) is the legacy API and Chromium supports it better
+ *
+ * IMPORTANT: NVDA must be running for this to work!
+ * - Chromium only exposes its accessibility tree when a screen reader is detected
+ * - NVDA uses DLL injection to register IAccessible2 proxy from INSIDE the process
+ * - The ensureNvdaForElectron() function handles this automatically
+ *
+ * Results on Electron apps:
+ * - 70-110+ elements detected (vs 3 with UIA)
+ * - Without NVDA: only 3-7 elements
+ *
+ * TODO macOS: Create ax-reader (Swift binary) using AXUIElement API
+ * - macOS uses AXUIElement for accessibility, not MSAA
+ * - Need to compile: swiftc ax-reader.swift -o ax-reader
+ * - Output same JSON format as MsaaReader.exe
+ * - Check if Electron exposes accessibility better on macOS
+ */
+async function findMsaaElements(windowTitle: string): Promise<UIElement[]> {
+  // TODO: Add macOS support with ax-reader binary
+  if (process.platform !== 'win32') {
+    return []; // macOS/Linux not yet supported
+  }
+
+  // Path to MsaaReader.exe (bundled with osbot)
+  // From dist/src/core/ go up 3 levels to reach osbot/, then into bin/
+  const msaaReaderPath = join(__dirname, '..', '..', '..', 'bin', 'MsaaReader.exe');
+
+  // Check if MsaaReader.exe exists
+  if (!existsSync(msaaReaderPath)) {
+    return [];
+  }
+
+  try {
+    // Escape the window title for command line
+    const safeTitle = windowTitle.replace(/"/g, '\\"');
+
+    const { stdout } = await execAsync(`"${msaaReaderPath}" "${safeTitle}"`, {
+      timeout: 15000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    const result = JSON.parse(stdout.trim());
+
+    if (result.error) {
+      return [];
+    }
+
+    // Map MSAA elements to UIElement format
+    return (result.elements || []).map(
+      (el: { type: string; name: string; x: number; y: number; width: number; height: number }) => ({
+        type: el.type,
+        name: el.name || '',
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        isEnabled: true,
+      })
+    );
+  } catch {
+    return [];
   }
 }
 
