@@ -290,6 +290,152 @@ export function wait(ms: number): Promise<void> {
 }
 
 /**
+ * Press mouse button down at current position
+ */
+export async function mouseDown(
+  button: 'left' | 'right' | 'middle' = 'left',
+  options: { dryRun?: boolean } = {}
+): Promise<void> {
+  const { dryRun = false } = options;
+  const pos = getMousePosition();
+  const params = { x: pos.x, y: pos.y, button, dryRun };
+
+  if (dryRun) {
+    console.log(`[DRY RUN] Mouse down ${button} at (${pos.x}, ${pos.y})`);
+    return;
+  }
+
+  // Security: check for user activity (kill switch)
+  checkUserActivity();
+
+  // Security: check restricted mode
+  await checkRestrictions('click', params);
+
+  // Execute with logging
+  await withLogging('mouseDown', params, async () => {
+    let effectiveButton = button;
+    if (mouseButtonsSwapped && process.platform === 'win32') {
+      if (button === 'left') effectiveButton = 'right';
+      else if (button === 'right') effectiveButton = 'left';
+    }
+
+    console.error(`[OSBot] Mouse down ${button} (effective: ${effectiveButton}) at (${pos.x}, ${pos.y})`);
+    robot.mouseToggle('down', effectiveButton);
+  });
+
+  // Update kill switch state
+  recordActionDone();
+}
+
+/**
+ * Release mouse button at current position
+ */
+export async function mouseUp(
+  button: 'left' | 'right' | 'middle' = 'left',
+  options: { dryRun?: boolean } = {}
+): Promise<void> {
+  const { dryRun = false } = options;
+  const pos = getMousePosition();
+  const params = { x: pos.x, y: pos.y, button, dryRun };
+
+  if (dryRun) {
+    console.log(`[DRY RUN] Mouse up ${button} at (${pos.x}, ${pos.y})`);
+    return;
+  }
+
+  // Security: check for user activity (kill switch)
+  checkUserActivity();
+
+  // Execute with logging
+  await withLogging('mouseUp', params, async () => {
+    let effectiveButton = button;
+    if (mouseButtonsSwapped && process.platform === 'win32') {
+      if (button === 'left') effectiveButton = 'right';
+      else if (button === 'right') effectiveButton = 'left';
+    }
+
+    console.error(`[OSBot] Mouse up ${button} (effective: ${effectiveButton}) at (${pos.x}, ${pos.y})`);
+    robot.mouseToggle('up', effectiveButton);
+  });
+
+  // Update kill switch state
+  recordActionDone();
+}
+
+export interface DragOptions {
+  button?: 'left' | 'right' | 'middle';
+  dryRun?: boolean;
+  /** Duration in ms for the drag movement (default: 500) */
+  duration?: number;
+  /** Number of steps for smooth movement (default: 20) */
+  steps?: number;
+}
+
+/**
+ * Drag from one position to another (click, hold, move, release)
+ */
+export async function drag(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  options: DragOptions = {}
+): Promise<void> {
+  const { button = 'left', dryRun = false, duration = 500, steps = 20 } = options;
+  const params = { fromX, fromY, toX, toY, button, dryRun, duration, steps };
+
+  if (dryRun) {
+    console.log(`[DRY RUN] Drag ${button} from (${fromX}, ${fromY}) to (${toX}, ${toY})`);
+    return;
+  }
+
+  // Security: check for user activity (kill switch)
+  checkUserActivity();
+
+  // Security: check restricted mode
+  await checkRestrictions('click', params);
+
+  // Execute with logging
+  await withLogging('drag', params, async () => {
+    let effectiveButton = button;
+    if (mouseButtonsSwapped && process.platform === 'win32') {
+      if (button === 'left') effectiveButton = 'right';
+      else if (button === 'right') effectiveButton = 'left';
+    }
+
+    console.error(`[OSBot] Drag ${button} (effective: ${effectiveButton}) from (${fromX}, ${fromY}) to (${toX}, ${toY})`);
+
+    // Move to start position
+    robot.moveMouse(fromX, fromY);
+    await wait(50);
+
+    // Press button
+    robot.mouseToggle('down', effectiveButton);
+    await wait(50);
+
+    // Smooth movement to destination
+    const stepDelay = duration / steps;
+    for (let i = 1; i <= steps; i++) {
+      const progress = i / steps;
+      const currentX = Math.round(fromX + (toX - fromX) * progress);
+      const currentY = Math.round(fromY + (toY - fromY) * progress);
+      robot.moveMouse(currentX, currentY);
+      await wait(stepDelay);
+    }
+
+    // Small delay at destination before release
+    await wait(50);
+
+    // Release button
+    robot.mouseToggle('up', effectiveButton);
+    console.error(`[OSBot] Drag complete`);
+  });
+
+  // Update kill switch state
+  recordActionDone();
+}
+
+/**
  * Get current mouse cursor position
  */
 export function getMousePosition(): { x: number; y: number } {

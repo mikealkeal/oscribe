@@ -13,7 +13,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { captureScreen, listScreens } from '../core/screenshot.js';
-import { click, typeText, hotkey, scroll, moveMouse, getMousePosition, clickAtCurrentPosition } from '../core/input.js';
+import { click, typeText, hotkey, scroll, moveMouse, getMousePosition, clickAtCurrentPosition, mouseDown, mouseUp, drag } from '../core/input.js';
 import { listWindows, focusWindow } from '../core/windows.js';
 import { getUIElements, getElementAtPoint, findSystemUIElements, getTaskbarConfig } from '../core/uiautomation.js';
 import { isNvdaInstalled, isNvdaRunning, initNvda, startNvda, stopNvda, getNvdaStatus } from '../core/nvda.js';
@@ -130,6 +130,19 @@ const WaitSchema = z.object({
 const InspectPointSchema = z.object({
   x: z.number().describe('X coordinate'),
   y: z.number().describe('Y coordinate'),
+});
+
+const MouseToggleSchema = z.object({
+  button: z.enum(['left', 'right', 'middle']).default('left').describe('Mouse button (default: left)'),
+});
+
+const DragSchema = z.object({
+  fromX: z.number().describe('Starting X coordinate'),
+  fromY: z.number().describe('Starting Y coordinate'),
+  toX: z.number().describe('Ending X coordinate'),
+  toY: z.number().describe('Ending Y coordinate'),
+  button: z.enum(['left', 'right', 'middle']).default('left').describe('Mouse button (default: left)'),
+  duration: z.number().default(500).describe('Duration of drag in ms (default: 500)'),
 });
 
 // Session recorder - initialized on first action
@@ -312,6 +325,42 @@ Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x
         inputSchema: {
           type: 'object',
           properties: {},
+        },
+      },
+      {
+        name: 'os_mouse_down',
+        description: 'Press and hold mouse button at current cursor position. For drag-and-drop, prefer os_drag which handles the complete operation. Use os_mouse_down + os_move + os_mouse_up only for complex multi-step drag scenarios.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)' },
+          },
+        },
+      },
+      {
+        name: 'os_mouse_up',
+        description: 'Release mouse button at current cursor position. Use after os_mouse_down to complete manual drag operations. For simple drag-and-drop, prefer os_drag instead.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)' },
+          },
+        },
+      },
+      {
+        name: 'os_drag',
+        description: 'Perform a drag-and-drop operation: moves to start position, holds mouse button, smoothly drags to destination, then releases. Use this for moving files, reordering items, resizing windows, or any UI interaction requiring drag-and-drop.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            fromX: { type: 'number', description: 'Starting X coordinate' },
+            fromY: { type: 'number', description: 'Starting Y coordinate' },
+            toX: { type: 'number', description: 'Ending X coordinate' },
+            toY: { type: 'number', description: 'Ending Y coordinate' },
+            button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)' },
+            duration: { type: 'number', description: 'Duration of drag in ms (default: 500)' },
+          },
+          required: ['fromX', 'fromY', 'toX', 'toY'],
         },
       },
     ],
@@ -765,6 +814,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: success ? '✅ NVDA stopped.' : '❌ Failed to stop NVDA.',
           }],
           isError: !success,
+        };
+      }
+
+      case 'os_mouse_down': {
+        const { button } = MouseToggleSchema.parse(args);
+        const pos = getMousePosition();
+
+        await recorder.recordAction('os_mouse_down', { x: pos.x, y: pos.y, button }, async () => {
+          await mouseDown(button);
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Mouse ${button} button pressed at (${pos.x}, ${pos.y})`,
+            },
+          ],
+        };
+      }
+
+      case 'os_mouse_up': {
+        const { button } = MouseToggleSchema.parse(args);
+        const pos = getMousePosition();
+
+        await recorder.recordAction('os_mouse_up', { x: pos.x, y: pos.y, button }, async () => {
+          await mouseUp(button);
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Mouse ${button} button released at (${pos.x}, ${pos.y})`,
+            },
+          ],
+        };
+      }
+
+      case 'os_drag': {
+        const { fromX, fromY, toX, toY, button, duration } = DragSchema.parse(args);
+
+        await recorder.recordAction('os_drag', { fromX, fromY, toX, toY, button, duration }, async () => {
+          await drag(fromX, fromY, toX, toY, { button, duration });
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Dragged from (${fromX}, ${fromY}) to (${toX}, ${toY})`,
+            },
+          ],
         };
       }
 

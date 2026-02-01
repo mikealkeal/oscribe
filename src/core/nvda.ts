@@ -42,9 +42,9 @@ const logger = {
 };
 
 // NVDA portable download URL (NV Access official)
-// Using portable version that doesn't require installation
-const NVDA_DOWNLOAD_URL = 'https://www.nvaccess.org/files/nvda/releases/2024.4.1/nvda_2024.4.1_portable.exe';
-const NVDA_VERSION = '2024.4.1';
+// Using official installer - can extract as portable with --portable flag
+const NVDA_DOWNLOAD_URL = 'https://download.nvaccess.org/releases/2025.3.2/nvda_2025.3.2.exe';
+const NVDA_VERSION = '2025.3.2';
 
 // Default paths (can be overridden via config.nvda.customPath)
 const TOOLS_DIR = join(homedir(), '.osbot', 'tools');
@@ -141,6 +141,7 @@ export function ensureSilentConfig(): void {
 
 /**
  * Check if NVDA is currently running (any instance)
+ * Checks for both nvda.exe (standard) and nvda_noUIAccess.exe (portable without UI Access)
  */
 export async function isNvdaRunning(): Promise<boolean> {
   if (process.platform !== 'win32') {
@@ -148,10 +149,19 @@ export async function isNvdaRunning(): Promise<boolean> {
   }
 
   try {
-    const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq nvda.exe" /NH', {
+    // Check for nvda.exe (standard NVDA installation)
+    const { stdout: stdout1 } = await execAsync('tasklist /FI "IMAGENAME eq nvda.exe" /NH', {
       timeout: 5000,
     });
-    return stdout.toLowerCase().includes('nvda.exe');
+    if (stdout1.toLowerCase().includes('nvda.exe')) {
+      return true;
+    }
+
+    // Check for nvda_noUIAccess.exe (portable NVDA without UI Access)
+    const { stdout: stdout2 } = await execAsync('tasklist /FI "IMAGENAME eq nvda_noUIAccess.exe" /NH', {
+      timeout: 5000,
+    });
+    return stdout2.toLowerCase().includes('nvda_nouiaccess.exe');
   } catch {
     return false;
   }
@@ -184,7 +194,7 @@ export async function downloadNvda(onProgress?: (percent: number) => void): Prom
     mkdirSync(TOOLS_DIR, { recursive: true });
   }
 
-  const downloadPath = join(tmpdir(), `nvda_${NVDA_VERSION}_portable.exe`);
+  const downloadPath = join(tmpdir(), `nvda_${NVDA_VERSION}.exe`);
 
   logger.info('Downloading NVDA portable...');
   logger.info(`URL: ${NVDA_DOWNLOAD_URL}`);
@@ -207,7 +217,7 @@ try {
 `;
 
     const { stdout, stderr } = await execAsync(
-      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`,
       { timeout: 300000 } // 5 min timeout for download
     );
 
@@ -240,31 +250,31 @@ export async function extractNvda(installerPath: string): Promise<void> {
   }
 
   try {
-    // NVDA portable installer can extract with --portable --portable-path
-    // Or we can use 7z to extract if available
-    // Try the portable installer method first
+    // NVDA installer supports --create-portable and --create-portable-silent
+    // This creates a portable copy in the specified directory
+    logger.info(`Extracting to: ${paths.dir}`);
 
-    await execAsync(
-      `"${installerPath}" --portable --portable-path="${paths.dir}" --minimal`,
-      { timeout: 120000 } // 2 min timeout
+    const { stdout, stderr } = await execAsync(
+      `"${installerPath}" --create-portable-silent --portable-path="${paths.dir}"`,
+      { timeout: 180000 } // 3 min timeout for extraction
     );
 
+    logger.debug('Extraction output', { stdout, stderr });
+
     // Wait for extraction to complete
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     if (!existsSync(paths.exe)) {
-      // Fallback: try extracting with 7z if available
-      const has7z = await check7zAvailable();
-      if (has7z) {
-        await execAsync(`7z x "${installerPath}" -o"${paths.dir}" -y`, {
-          timeout: 120000,
-        });
+      // Check if files are in a subdirectory
+      const altExe = join(paths.dir, 'nvda.exe');
+      if (existsSync(altExe)) {
+        logger.info('NVDA extracted (using nvda.exe)');
       } else {
-        throw new Error('NVDA extraction failed and 7z not available');
+        throw new Error(`NVDA exe not found at ${paths.exe} or ${altExe}`);
       }
     }
 
-    logger.info('NVDA portable extracted');
+    logger.info('NVDA portable extracted successfully');
   } catch (error) {
     logger.error('Failed to extract NVDA', { error });
     throw error;
@@ -357,7 +367,7 @@ export async function startNvda(autoInit = false): Promise<boolean> {
     logger.info('Starting NVDA in silent mode...');
 
     // Start NVDA with minimal mode and custom config
-    nvdaProcess = spawn(paths.exe, ['--minimal', `-c="${paths.configDir}"`], {
+    nvdaProcess = spawn(paths.exe, ['--minimal', `-c=${paths.configDir}`], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,

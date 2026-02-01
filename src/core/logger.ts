@@ -11,7 +11,7 @@ import { loadConfig } from '../config/index.js';
 // Wide event interface - all context for one action
 export interface ActionEvent {
   timestamp: string;
-  action: 'click' | 'move' | 'type' | 'hotkey' | 'scroll';
+  action: 'click' | 'move' | 'type' | 'hotkey' | 'scroll' | 'mouseDown' | 'mouseUp' | 'drag';
   params: Record<string, unknown>;
   duration_ms: number;
   success: boolean;
