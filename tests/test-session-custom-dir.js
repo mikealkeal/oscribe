@@ -53,7 +53,7 @@ console.log('\n📊 Résumé:');
 console.log(`   Dossier custom: ${customDir}`);
 console.log(`   Session: ${sessionDir}`);
 console.log('\n💡 Pour utiliser en production:');
-console.log('   Édite ~/.osbot/config.json et ajoute:');
+console.log('   Édite ~/.oscribe/config.json et ajoute:');
 console.log('   "sessionDir": "ton/dossier/custom"');
 
 // Restore original config

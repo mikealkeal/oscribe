@@ -57,7 +57,7 @@ temp/
 .mcp.json
 
 # Development notes & private docs
-OSbot-points-a-revoir.md
+OScribe-points-a-revoir.md
 CLAUDE.md
 SESSION-*.md
 FEATURE*.md
