@@ -18,7 +18,7 @@ import { listWindows, focusWindow } from '../core/windows.js';
 import { getUIElements, getElementAtPoint, findSystemUIElements, getTaskbarConfig } from '../core/uiautomation.js';
 import { isNvdaInstalled, isNvdaRunning, initNvda, startNvda, stopNvda, getNvdaStatus } from '../core/nvda.js';
 import { RestrictedActionError } from '../core/security.js';
-import { UserInterruptError } from '../core/killswitch.js';
+import { UserInterruptError, resetKillSwitch } from '../core/killswitch.js';
 import { SessionRecorder, ScreenContext, UIElementContext } from '../core/session-recorder.js';
 
 // Known client image size limits for calculating resize ratio
@@ -371,6 +371,10 @@ Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const recorder = getRecorder();
+
+  // Reset kill switch at the start of each MCP call
+  // This prevents false positives from previous mouse movements
+  resetKillSwitch();
 
   try {
     switch (name) {

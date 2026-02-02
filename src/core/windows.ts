@@ -275,11 +275,26 @@ Write-Output "$hwnd|$($sb.ToString())";
 
 async function getActiveWindowMacOS(): Promise<WindowInfo | null> {
   try {
-    const { stdout } = await execAsync(
-      `osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true'`
-    );
-    const app = stdout.trim();
-    return { id: '0', title: app, app };
+    // Get frontmost app name AND window title
+    const script = `
+      tell application "System Events"
+        set frontApp to first application process whose frontmost is true
+        set appName to name of frontApp
+        try
+          set windowTitle to name of front window of frontApp
+          return appName & "|" & windowTitle
+        on error
+          return appName & "|"
+        end try
+      end tell
+    `;
+
+    const { stdout } = await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+    const parts = stdout.trim().split('|');
+    const app = parts[0] ?? '';
+    const windowTitle = parts[1] ?? app; // Fallback to app name if no window title
+
+    return { id: '0', title: windowTitle, app };
   } catch {
     return null;
   }

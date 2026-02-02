@@ -5,7 +5,7 @@
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
-[![Windows](https://img.shields.io/badge/platform-Windows-0078D6)](https://github.com/mikealkeal/oscribe)
+[![Windows](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-0078D6)](https://github.com/mikealkeal/oscribe)
 
 <!-- Demo GIF placeholder - replace with actual demo -->
 <!-- ![OScribe Demo](assets/demo.gif) -->
@@ -79,14 +79,25 @@ npm link  # Optional: makes 'oscribe' command available globally
 
 | Platform | Status |
 | -------- | ------ |
-| Windows  | ✅ Tested |
-| macOS    | 🚧 Not tested yet |
+| Windows  | ✅ Fully supported |
+| macOS    | ✅ Supported |
 | Linux    | 🚧 Not tested yet |
 
 #### Windows
 
 - PowerShell (included)
+- UI Automation via PowerShell + .NET
+- NVDA support for Electron apps
 - No additional dependencies needed
+
+#### macOS
+
+- Native screencapture command
+- UI Automation via AXUIElement API (`ax-reader` binary)
+- Requires: **Accessibility permissions** (System Preferences → Security & Privacy → Privacy → Accessibility)
+- Add Terminal or your IDE to allowed apps
+- Native apps (Chrome, Safari, Finder) work well
+- Electron apps (VS Code, etc.) have limited element detection (same as Windows without NVDA)
 
 ## Usage
 

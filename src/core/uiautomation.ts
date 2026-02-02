@@ -108,10 +108,20 @@ function detectStrategy(windowClass: string): 'native' | 'webview2' | 'electron'
  * When no window is focused (desktop active), returns taskbar elements
  */
 export async function getUIElements(windowTitle?: string): Promise<UITree> {
-  if (process.platform !== 'win32') {
-    throw new Error('UI Automation is only available on Windows');
+  // Platform-specific implementation
+  if (process.platform === 'darwin') {
+    return getUIElementsMacOS(windowTitle);
+  } else if (process.platform === 'win32') {
+    return getUIElementsWindows(windowTitle);
+  } else {
+    throw new Error(`UI Automation is not yet supported on ${process.platform}`);
   }
+}
 
+/**
+ * Windows implementation of UI Automation
+ */
+async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
   // Step 1: Get window info and detect strategy
   const windowInfo = await getWindowInfo(windowTitle);
 
@@ -662,6 +672,125 @@ async function findMsaaElements(windowTitle: string): Promise<UIElement[]> {
 }
 
 /**
+ * macOS implementation using AXUIElement via ax-reader binary
+ */
+async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
+  // Path to ax-reader binary (bundled with oscribe)
+  const axReaderPath = join(__dirname, '..', '..', '..', 'bin', 'ax-reader');
+
+  // Check if ax-reader exists
+  if (!existsSync(axReaderPath)) {
+    throw new Error('ax-reader binary not found. Run: swiftc bin/ax-reader.swift -o bin/ax-reader');
+  }
+
+  // Get active window if no title specified
+  let targetWindow = windowTitle;
+  if (!targetWindow) {
+    const { getActiveWindow } = await import('./windows.js');
+    const activeWindow = await getActiveWindow();
+    targetWindow = activeWindow?.title ?? '';
+  }
+
+  if (!targetWindow) {
+    // No window focused - return empty for now
+    // TODO: Return Dock elements on macOS?
+    return {
+      window: 'Desktop',
+      windowClass: 'Desktop',
+      strategy: 'native',
+      elements: [],
+      ui: [],
+      content: [],
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  try {
+    // Escape window title for shell
+    const safeTitle = targetWindow.replace(/"/g, '\\"');
+
+    const { stdout } = await execAsync(`"${axReaderPath}" "${safeTitle}"`, {
+      timeout: 15000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    const output = stdout.trim();
+
+    // Check for empty output (permissions issue)
+    if (!output) {
+      throw new Error(
+        `ax-reader returned no output. This usually means:\n` +
+        `1. Accessibility permissions are not granted\n` +
+        `2. The window "${targetWindow}" was not found\n\n` +
+        `To grant permissions:\n` +
+        `System Settings > Privacy & Security > Accessibility > Enable for your terminal/IDE`
+      );
+    }
+
+    const result = JSON.parse(output) as {
+      window: string;
+      elements: Array<{
+        type: string;
+        name: string;
+        description?: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        isEnabled: boolean;
+      }>;
+      error?: string;
+    };
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    // Map to UIElement format
+    const elements: UIElement[] = result.elements.map((el) => {
+      const element: UIElement = {
+        type: el.type,
+        name: el.name || '',
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        isEnabled: el.isEnabled,
+      };
+      if (el.description) {
+        element.description = el.description;
+      }
+      return element;
+    });
+
+    // Separate UI elements from content
+    const ui = elements.filter((el) => el.type !== 'Text' && el.type !== 'Image');
+    const content = elements.filter((el) => el.type === 'Text');
+
+    return {
+      window: result.window,
+      windowClass: 'AXWindow', // macOS uses AX roles
+      strategy: 'native',
+      elements,
+      ui,
+      content,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error) {
+    // Return empty on error
+    return {
+      window: targetWindow,
+      windowClass: 'Unknown',
+      strategy: 'native',
+      elements: [],
+      ui: [],
+      content: [],
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
  * Find a specific element by name or type
  */
 export async function findElement(
@@ -693,9 +822,29 @@ export async function findElement(
  * Get element at cursor position
  */
 export async function getElementAtPoint(x: number, y: number): Promise<UIElement | null> {
-  if (process.platform !== 'win32') {
-    throw new Error('UI Automation is only available on Windows');
+  if (process.platform === 'darwin') {
+    return getElementAtPointMacOS(x, y);
+  } else if (process.platform === 'win32') {
+    return getElementAtPointWindows(x, y);
+  } else {
+    throw new Error(`UI Automation is not yet supported on ${process.platform}`);
   }
+}
+
+/**
+ * macOS: Get element at point (not yet implemented - returns null)
+ * TODO: Implement using AXUIElementCopyElementAtPosition
+ */
+async function getElementAtPointMacOS(_x: number, _y: number): Promise<UIElement | null> {
+  // For now, return null - this would require extending ax-reader
+  // or using a separate Swift snippet
+  return null;
+}
+
+/**
+ * Windows: Get element at cursor position
+ */
+async function getElementAtPointWindows(x: number, y: number): Promise<UIElement | null> {
 
   const psScript = `
 Add-Type -AssemblyName UIAutomationClient;
