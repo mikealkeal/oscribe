@@ -33,7 +33,7 @@
     "mcp",
     "cli"
   ],
-  "author": "",
+  "author": "Mickaël Bellun <mbellun@gmail.com>",
   "license": "BSL-1.1",
   "repository": {
     "type": "git",

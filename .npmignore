@@ -1,0 +1,35 @@
+# Source files (dist is published, not src/)
+/src/
+/bin/*.ts
+/bin/*.cs
+
+# Config files
+.github/
+.claude/
+.eslintrc*
+eslint.config.js
+.prettierrc
+tsconfig.json
+.env*
+.mcp.json
+
+# Build artifacts
+dist/tsconfig.tsbuildinfo
+
+# Tests
+tests/
+
+# Documentation (except README)
+*.md
+!README.md
+
+# Development
+.agents/
+scripts/
+node_modules/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+nul
