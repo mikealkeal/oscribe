@@ -1,6 +1,6 @@
 /**
- * OSbot - Vision-based desktop automation engine
- * @module osbot
+ * OScribe - Vision-based desktop automation engine
+ * @module oscribe
  */
 
 export * from './core/index.js';

@@ -162,10 +162,10 @@ export function nvdaCommand(): Command {
     );
     console.log();
     console.log('Commands:');
-    console.log(`  ${chalk.yellow('osbot nvda status')}   Show detailed status`);
-    console.log(`  ${chalk.yellow('osbot nvda install')}  Download NVDA portable`);
-    console.log(`  ${chalk.yellow('osbot nvda start')}    Start NVDA silently`);
-    console.log(`  ${chalk.yellow('osbot nvda stop')}     Stop NVDA`);
+    console.log(`  ${chalk.yellow('oscribe nvda status')}   Show detailed status`);
+    console.log(`  ${chalk.yellow('oscribe nvda install')}  Download NVDA portable`);
+    console.log(`  ${chalk.yellow('oscribe nvda start')}    Start NVDA silently`);
+    console.log(`  ${chalk.yellow('oscribe nvda stop')}     Stop NVDA`);
     console.log();
     console.log(
       chalk.gray('NVDA enables full UI element detection in Electron apps.')

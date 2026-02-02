@@ -1,9 +1,9 @@
-# Validation script for OSbot (Windows PowerShell)
+# Validation script for OScribe (Windows PowerShell)
 # Tests all major functionality manually
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "🔍 OSbot Validation Script" -ForegroundColor Cyan
+Write-Host "🔍 OScribe Validation Script" -ForegroundColor Cyan
 Write-Host "==========================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -34,13 +34,13 @@ Write-Host "✅ Typecheck passed" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "📋 4. Testing CLI help..."
-node dist/bin/osbot.js --help | Out-Null
+node dist/bin/oscribe.js --help | Out-Null
 Write-Host "✅ CLI help works" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "📸 5. Testing screenshot list..."
 try {
-    node dist/bin/osbot.js screenshot --list | Out-Null
+    node dist/bin/oscribe.js screenshot --list | Out-Null
     Write-Host "✅ Screenshot list works" -ForegroundColor Green
 } catch {
     Write-Host "⚠️  Screenshot list failed (may need platform dependencies)" -ForegroundColor Yellow
@@ -49,7 +49,7 @@ try {
 Write-Host ""
 Write-Host "🪟 6. Testing windows list..."
 try {
-    node dist/bin/osbot.js windows | Out-Null
+    node dist/bin/oscribe.js windows | Out-Null
     Write-Host "✅ Windows list works" -ForegroundColor Green
 } catch {
     Write-Host "⚠️  Windows list failed (may need platform dependencies)" -ForegroundColor Yellow
@@ -58,7 +58,7 @@ try {
 Write-Host ""
 Write-Host "🔐 7. Testing login status..."
 try {
-    node dist/bin/osbot.js login --status | Out-Null
+    node dist/bin/oscribe.js login --status | Out-Null
 } catch {
     Write-Host "⚠️  Not logged in (expected)" -ForegroundColor Yellow
 }
@@ -68,10 +68,10 @@ Write-Host "==========================" -ForegroundColor Cyan
 Write-Host "✅ Core validation complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "📝 Manual tests needed:"
-Write-Host "  • osbot init"
-Write-Host "  • osbot login"
-Write-Host "  • osbot screenshot --describe"
-Write-Host "  • osbot click `"target`""
-Write-Host "  • osbot type `"text`""
-Write-Host "  • osbot serve (test MCP)"
+Write-Host "  • oscribe init"
+Write-Host "  • oscribe login"
+Write-Host "  • oscribe screenshot --describe"
+Write-Host "  • oscribe click `"target`""
+Write-Host "  • oscribe type `"text`""
+Write-Host "  • oscribe serve (test MCP)"
 Write-Host ""

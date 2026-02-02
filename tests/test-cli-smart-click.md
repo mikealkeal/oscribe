@@ -14,7 +14,7 @@ Test manuel du feedback loop via la ligne de commande.
 
 ```bash
 # Click avec feedback loop activé (défaut)
-node dist/bin/osbot.js click "address bar" --verbose
+node dist/bin/oscribe.js click "address bar" --verbose
 
 # Attendu:
 # [Attempt 1/3] Looking for "address bar"...
@@ -27,7 +27,7 @@ node dist/bin/osbot.js click "address bar" --verbose
 
 ```bash
 # Click simple sans feedback loop
-node dist/bin/osbot.js click "address bar" --no-verify
+node dist/bin/oscribe.js click "address bar" --no-verify
 
 # Attendu:
 # ✓ Found "address bar" at (450, 120)
@@ -39,7 +39,7 @@ node dist/bin/osbot.js click "address bar" --no-verify
 
 ```bash
 # Click sur élément qui peut nécessiter plusieurs tentatives
-node dist/bin/osbot.js click "Submit button" --max-attempts 5 --verbose
+node dist/bin/oscribe.js click "Submit button" --max-attempts 5 --verbose
 
 # Attendu (si échec à la 1ère tentative):
 # [Attempt 1/5] Looking for "Submit button"...
@@ -55,7 +55,7 @@ node dist/bin/osbot.js click "Submit button" --max-attempts 5 --verbose
 
 ```bash
 # Dry run désactive automatiquement la vérification
-node dist/bin/osbot.js click "File menu" --dry-run
+node dist/bin/oscribe.js click "File menu" --dry-run
 
 # Attendu:
 # ✓ Found "File menu" at (50, 30)
@@ -66,13 +66,13 @@ node dist/bin/osbot.js click "File menu" --dry-run
 
 | Mode | Commande | Vérification | Retry | Tokens |
 |------|----------|--------------|-------|--------|
-| **Smart** | `osbot click "target"` | ✅ | ✅ | ~2× (before + after) |
-| **Simple** | `osbot click "target" --no-verify` | ❌ | ❌ | ~1× (before only) |
-| **Dry Run** | `osbot click "target" --dry-run` | ❌ | ❌ | ~1× (before only) |
+| **Smart** | `oscribe click "target"` | ✅ | ✅ | ~2× (before + after) |
+| **Simple** | `oscribe click "target" --no-verify` | ❌ | ❌ | ~1× (before only) |
+| **Dry Run** | `oscribe click "target" --dry-run` | ❌ | ❌ | ~1× (before only) |
 
 ## Configuration
 
-Dans `~/.osbot/config.json`:
+Dans `~/.oscribe/config.json`:
 
 ```json
 {

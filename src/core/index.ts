@@ -1,5 +1,5 @@
 /**
- * Core modules for OSbot
+ * Core modules for OScribe
  */
 
 export * from './screenshot.js';

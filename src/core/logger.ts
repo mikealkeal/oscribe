@@ -19,7 +19,7 @@ export interface ActionEvent {
   platform: typeof process.platform;
 }
 
-const LOGS_DIR = join(homedir(), '.osbot', 'logs');
+const LOGS_DIR = join(homedir(), '.oscribe', 'logs');
 
 function ensureLogsDir(): void {
   if (!existsSync(LOGS_DIR)) {

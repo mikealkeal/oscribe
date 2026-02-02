@@ -1,10 +1,10 @@
 {
-  "name": "osbot",
+  "name": "oscribe",
   "version": "0.1.0",
   "description": "Vision-based desktop automation engine",
   "type": "module",
   "bin": {
-    "osbot": "./dist/bin/osbot.js"
+    "oscribe": "./dist/bin/oscribe.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,8 +16,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch bin/osbot.ts",
-    "start": "node dist/bin/osbot.js",
+    "dev": "tsx watch bin/oscribe.ts",
+    "start": "node dist/bin/oscribe.js",
     "lint": "eslint src bin --ext .ts",
     "lint:fix": "eslint src bin --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"bin/**/*.ts\"",
@@ -37,12 +37,12 @@
   "license": "BSL-1.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mikealkeal/osbot.git"
+    "url": "git+https://github.com/mikealkeal/oscribe.git"
   },
   "bugs": {
-    "url": "https://github.com/mikealkeal/osbot/issues"
+    "url": "https://github.com/mikealkeal/oscribe/issues"
   },
-  "homepage": "https://github.com/mikealkeal/osbot#readme",
+  "homepage": "https://github.com/mikealkeal/oscribe#readme",
   "engines": {
     "node": ">=22.0.0"
   },

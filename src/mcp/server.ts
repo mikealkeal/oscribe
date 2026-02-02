@@ -1,5 +1,5 @@
 /**
- * MCP Server for OSbot
+ * MCP Server for OScribe
  * Exposes desktop automation tools via Model Context Protocol
  */
 
@@ -79,7 +79,7 @@ const packageJson = JSON.parse(
 
 const server = new Server(
   {
-    name: 'osbot',
+    name: 'oscribe',
     version: packageJson.version,
   },
   {
@@ -899,5 +899,5 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 export async function startServer(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('OSbot MCP server started');
+  console.error('OScribe MCP server started');
 }

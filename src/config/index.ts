@@ -1,5 +1,5 @@
 /**
- * Configuration management for OSbot
+ * Configuration management for OScribe
  */
 
 import { homedir } from 'node:os';
@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 
-const CONFIG_DIR = join(homedir(), '.osbot');
+const CONFIG_DIR = join(homedir(), '.oscribe');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 // Security: Restricted mode schema

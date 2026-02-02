@@ -29,7 +29,7 @@ interface GifOptions {
  */
 function getSessionsDir(): string {
   const config = loadConfig();
-  return config.sessionDir || join(homedir(), '.osbot', 'sessions');
+  return config.sessionDir || join(homedir(), '.oscribe', 'sessions');
 }
 
 /**

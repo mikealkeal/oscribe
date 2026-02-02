@@ -73,8 +73,8 @@ export class SessionRecorder {
     const sessionId = this.generateSessionId();
     const config = loadConfig();
 
-    // Use configured session dir or default to ~/.osbot/sessions
-    const baseDir = config.sessionDir ?? join(homedir(), '.osbot', 'sessions');
+    // Use configured session dir or default to ~/.oscribe/sessions
+    const baseDir = config.sessionDir ?? join(homedir(), '.oscribe', 'sessions');
 
     this.sessionDir = join(baseDir, sessionId);
     this.screenshotDir = join(this.sessionDir, 'screenshots');

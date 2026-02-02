@@ -23,7 +23,7 @@ async function detectSwappedMouseButtons(): Promise<void> {
       );
       mouseButtonsSwapped = stdout.trim() === '1';
       if (mouseButtonsSwapped) {
-        console.error('[OSBot] Detected swapped mouse buttons in Windows - adapting clicks');
+        console.error('[OScribe] Detected swapped mouse buttons in Windows - adapting clicks');
       }
     } catch {
       mouseButtonsSwapped = false;
@@ -100,7 +100,7 @@ export async function click(x: number, y: number, options: ClickOptions = {}): P
     // Small delay to ensure position is set
     await wait(50);
 
-    console.error(`[OSBot] Click ${button} (effective: ${effectiveButton}) at (${x}, ${y})`);
+    console.error(`[OScribe] Click ${button} (effective: ${effectiveButton}) at (${x}, ${y})`);
 
     // Click
     if (double) {
@@ -136,7 +136,7 @@ export async function typeText(text: string, options: TypeOptions = {}): Promise
 
   // Execute with logging
   await withLogging('type', params, async () => {
-    console.error(`[OSBot] Typing text: "${text}"`);
+    console.error(`[OScribe] Typing text: "${text}"`);
 
     if (delay > 0) {
       robot.setKeyboardDelay(delay);
@@ -144,9 +144,9 @@ export async function typeText(text: string, options: TypeOptions = {}): Promise
 
     try {
       robot.typeString(text);
-      console.error(`[OSBot] Typing complete`);
+      console.error(`[OScribe] Typing complete`);
     } catch (error) {
-      console.error(`[OSBot] Typing error:`, error);
+      console.error(`[OScribe] Typing error:`, error);
       throw error;
     }
   });
@@ -172,7 +172,7 @@ export async function hotkey(keys: string[], options: { dryRun?: boolean } = {})
 
   // Execute with logging
   await withLogging('hotkey', params, async () => {
-    console.error(`[OSBot] Hotkey: ${keys.join('+')}`);
+    console.error(`[OScribe] Hotkey: ${keys.join('+')}`);
 
     // Use robotjs - native, reliable, works on all platforms
     const keyMap: Record<string, string> = {
@@ -218,13 +218,13 @@ export async function hotkey(keys: string[], options: { dryRun?: boolean } = {})
       }
     });
 
-    console.error(`[OSBot] Modifiers: ${modifiers.join('+')}, Main key: ${mainKey}`);
+    console.error(`[OScribe] Modifiers: ${modifiers.join('+')}, Main key: ${mainKey}`);
 
     try {
       robot.keyTap(mainKey, modifiers);
-      console.error(`[OSBot] Hotkey complete`);
+      console.error(`[OScribe] Hotkey complete`);
     } catch (error) {
-      console.error(`[OSBot] Hotkey error:`, error);
+      console.error(`[OScribe] Hotkey error:`, error);
       throw error;
     }
   });
@@ -319,7 +319,7 @@ export async function mouseDown(
       else if (button === 'right') effectiveButton = 'left';
     }
 
-    console.error(`[OSBot] Mouse down ${button} (effective: ${effectiveButton}) at (${pos.x}, ${pos.y})`);
+    console.error(`[OScribe] Mouse down ${button} (effective: ${effectiveButton}) at (${pos.x}, ${pos.y})`);
     robot.mouseToggle('down', effectiveButton);
   });
 
@@ -354,7 +354,7 @@ export async function mouseUp(
       else if (button === 'right') effectiveButton = 'left';
     }
 
-    console.error(`[OSBot] Mouse up ${button} (effective: ${effectiveButton}) at (${pos.x}, ${pos.y})`);
+    console.error(`[OScribe] Mouse up ${button} (effective: ${effectiveButton}) at (${pos.x}, ${pos.y})`);
     robot.mouseToggle('up', effectiveButton);
   });
 
@@ -403,7 +403,7 @@ export async function drag(
       else if (button === 'right') effectiveButton = 'left';
     }
 
-    console.error(`[OSBot] Drag ${button} (effective: ${effectiveButton}) from (${fromX}, ${fromY}) to (${toX}, ${toY})`);
+    console.error(`[OScribe] Drag ${button} (effective: ${effectiveButton}) from (${fromX}, ${fromY}) to (${toX}, ${toY})`);
 
     // Move to start position
     robot.moveMouse(fromX, fromY);
@@ -428,7 +428,7 @@ export async function drag(
 
     // Release button
     robot.mouseToggle('up', effectiveButton);
-    console.error(`[OSBot] Drag complete`);
+    console.error(`[OScribe] Drag complete`);
   });
 
   // Update kill switch state
@@ -471,7 +471,7 @@ export async function clickAtCurrentPosition(options: Omit<ClickOptions, 'double
       else if (button === 'right') effectiveButton = 'left';
     }
 
-    console.error(`[OSBot] Click ${button} (effective: ${effectiveButton}) at current position (${pos.x}, ${pos.y})`);
+    console.error(`[OScribe] Click ${button} (effective: ${effectiveButton}) at current position (${pos.x}, ${pos.y})`);
 
     if (double) {
       robot.mouseToggle('down', effectiveButton);

@@ -56,7 +56,7 @@ let currentSessionId: string = generateSessionId();
 let sessionStartTime: string = new Date().toISOString();
 let sessionStats: SessionStats = createEmptyStats();
 
-const LOGS_DIR = join(homedir(), '.osbot', 'logs');
+const LOGS_DIR = join(homedir(), '.oscribe', 'logs');
 
 function generateSessionId(): string {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

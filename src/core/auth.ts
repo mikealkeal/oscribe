@@ -12,7 +12,7 @@ import { getConfigDir, ensureConfigDir, loadConfig } from '../config/index.js';
 
 const ANTHROPIC_AUTH_URL = 'https://console.anthropic.com/oauth/authorize';
 const ANTHROPIC_TOKEN_URL = 'https://console.anthropic.com/oauth/token';
-const CLIENT_ID = 'osbot-cli';
+const CLIENT_ID = 'oscribe-cli';
 
 interface TokenData {
   access_token: string;
@@ -269,14 +269,14 @@ export async function getAccessToken(): Promise<string> {
   let token = loadToken();
 
   if (!token) {
-    throw new Error('Not logged in. Run "osbot login" first.');
+    throw new Error('Not logged in. Run "oscribe login" first.');
   }
 
   if (isTokenExpired(token)) {
     try {
       token = await refreshToken(token);
     } catch {
-      throw new Error('Session expired. Run "osbot login" to re-authenticate.');
+      throw new Error('Session expired. Run "oscribe login" to re-authenticate.');
     }
   }
 

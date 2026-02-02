@@ -38,7 +38,7 @@ export async function captureScreen(options: ScreenshotOptions = {}): Promise<Sc
   const { screen = 0 } = options;
 
   // Create temp file for screenshot
-  const tempDir = await mkdtemp(join(tmpdir(), 'osbot-'));
+  const tempDir = await mkdtemp(join(tmpdir(), 'oscribe-'));
   const tempFile = join(tempDir, 'screenshot.png');
 
   try {
@@ -87,13 +87,13 @@ async function captureWindows(outputPath: string, screenIndex: number): Promise<
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-if (-not ([System.Management.Automation.PSTypeName]'OSBot${uniqueId}.CursorCapture').Type) {
+if (-not ([System.Management.Automation.PSTypeName]'OScribe${uniqueId}.CursorCapture').Type) {
     Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 using System.Drawing;
 
-namespace OSBot${uniqueId} {
+namespace OScribe${uniqueId} {
     public class CursorCapture {
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT { public int x; public int y; }
@@ -143,19 +143,19 @@ $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
 
-$cursorInfo = New-Object OSBot${uniqueId}.CursorCapture+CURSORINFO
+$cursorInfo = New-Object OScribe${uniqueId}.CursorCapture+CURSORINFO
 $cursorInfo.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($cursorInfo)
-if ([OSBot${uniqueId}.CursorCapture]::GetCursorInfo([ref]$cursorInfo)) {
-    if (($cursorInfo.flags -band [OSBot${uniqueId}.CursorCapture]::CURSOR_SHOWING) -ne 0) {
-        $iconInfo = New-Object OSBot${uniqueId}.CursorCapture+ICONINFO
-        if ([OSBot${uniqueId}.CursorCapture]::GetIconInfo($cursorInfo.hCursor, [ref]$iconInfo)) {
+if ([OScribe${uniqueId}.CursorCapture]::GetCursorInfo([ref]$cursorInfo)) {
+    if (($cursorInfo.flags -band [OScribe${uniqueId}.CursorCapture]::CURSOR_SHOWING) -ne 0) {
+        $iconInfo = New-Object OScribe${uniqueId}.CursorCapture+ICONINFO
+        if ([OScribe${uniqueId}.CursorCapture]::GetIconInfo($cursorInfo.hCursor, [ref]$iconInfo)) {
             $x = $cursorInfo.ptScreenPos.x - $bounds.X - ($iconInfo.xHotspot * ${cursorMultiplier})
             $y = $cursorInfo.ptScreenPos.y - $bounds.Y - ($iconInfo.yHotspot * ${cursorMultiplier})
             $hdc = $graphics.GetHdc()
-            [OSBot${uniqueId}.CursorCapture]::DrawIconEx($hdc, $x, $y, $cursorInfo.hCursor, ${cursorSize}, ${cursorSize}, 0, [IntPtr]::Zero, [OSBot${uniqueId}.CursorCapture]::DI_NORMAL) | Out-Null
+            [OScribe${uniqueId}.CursorCapture]::DrawIconEx($hdc, $x, $y, $cursorInfo.hCursor, ${cursorSize}, ${cursorSize}, 0, [IntPtr]::Zero, [OScribe${uniqueId}.CursorCapture]::DI_NORMAL) | Out-Null
             $graphics.ReleaseHdc($hdc)
-            if ($iconInfo.hbmMask -ne [IntPtr]::Zero) { [OSBot${uniqueId}.CursorCapture]::DeleteObject($iconInfo.hbmMask) | Out-Null }
-            if ($iconInfo.hbmColor -ne [IntPtr]::Zero) { [OSBot${uniqueId}.CursorCapture]::DeleteObject($iconInfo.hbmColor) | Out-Null }
+            if ($iconInfo.hbmMask -ne [IntPtr]::Zero) { [OScribe${uniqueId}.CursorCapture]::DeleteObject($iconInfo.hbmMask) | Out-Null }
+            if ($iconInfo.hbmColor -ne [IntPtr]::Zero) { [OScribe${uniqueId}.CursorCapture]::DeleteObject($iconInfo.hbmColor) | Out-Null }
         }
     }
 }
@@ -166,7 +166,7 @@ $bitmap.Dispose()
 `;
 
   // Write to temp file (script too long for command line)
-  const tempDir = await mkdtemp(join(tmpdir(), 'osbot-'));
+  const tempDir = await mkdtemp(join(tmpdir(), 'oscribe-'));
   const tempScript = join(tempDir, 'capture.ps1');
 
   try {

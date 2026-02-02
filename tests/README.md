@@ -1,4 +1,4 @@
-# Tests OSbot
+# Tests OScribe
 
 Tests de validation et exemples d'utilisation.
 
@@ -35,7 +35,7 @@ node tests/test-session-recorder.js
 - Sauvegarde de screenshots
 - Génération de rapport Markdown
 
-**Résultat:** Session créée dans `~/.osbot/sessions/`
+**Résultat:** Session créée dans `~/.oscribe/sessions/`
 
 ---
 
@@ -133,6 +133,6 @@ node tests/test-smart-click.js
 ## Notes
 
 - Les tests d'automation (`test-automation-*`) utilisent robotjs
-- Les sessions de test sont créées dans `~/.osbot/sessions/`
+- Les sessions de test sont créées dans `~/.oscribe/sessions/`
 - Les tests de validation ne nécessitent pas d'authentification
 - Les tests d'automation nécessitent que les applications soient disponibles

@@ -23,10 +23,10 @@
     "maxAttempts": "Max retry attempts for smart actions (1-10, default: 3)",
     "verifyDelay": "Delay in ms before verifying action (0-5000, default: 800)",
     "_sessionDirExamples": [
-      "null (default: ~/.osbot/sessions)",
-      "\"C:/Projects/osbot-sessions\" (absolute path)",
+      "null (default: ~/.oscribe/sessions)",
+      "\"C:/Projects/oscribe-sessions\" (absolute path)",
       "\"./sessions\" (relative to current directory)",
-      "\"/tmp/osbot-sessions\" (Linux/Mac)"
+      "\"/tmp/oscribe-sessions\" (Linux/Mac)"
     ]
   }
 }

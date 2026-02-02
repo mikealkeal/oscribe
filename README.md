@@ -1,18 +1,18 @@
-# OSbot
+# OScribe
 
 > Vision-based desktop automation MCP server. Control any application via screenshot + AI vision.
 
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
-[![Windows](https://img.shields.io/badge/platform-Windows-0078D6)](https://github.com/mikealkeal/osbot)
+[![Windows](https://img.shields.io/badge/platform-Windows-0078D6)](https://github.com/mikealkeal/oscribe)
 
 <!-- Demo GIF placeholder - replace with actual demo -->
-<!-- ![OSbot Demo](assets/demo.gif) -->
+<!-- ![OScribe Demo](assets/demo.gif) -->
 
 ## Table of Contents
 
-- [Why OSbot?](#why-osbot)
+- [Why OScribe?](#why-oscribe)
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [MCP Integration](#mcp-integration)
@@ -22,11 +22,11 @@
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
 
-## Why OSbot?
+## Why OScribe?
 
-> **"If you can see it, OSbot can click it."**
+> **"If you can see it, OScribe can click it."**
 
-OSbot is your fallback when traditional automation tools fail:
+OScribe is your fallback when traditional automation tools fail:
 
 - **Legacy apps** without APIs
 - **Games and canvas apps** without DOM
@@ -47,13 +47,13 @@ OSbot is your fallback when traditional automation tools fail:
 
 ```bash
 # Install from source
-git clone https://github.com/mikealkeal/osbot.git
-cd osbot
+git clone https://github.com/mikealkeal/oscribe.git
+cd oscribe
 npm install
 npm run build
 
 # Start MCP server (used by Claude Desktop, Claude Code, etc.)
-node dist/bin/osbot.js serve
+node dist/bin/oscribe.js serve
 ```
 
 Then configure your MCP client (see [MCP Integration](#mcp-integration) below).
@@ -68,11 +68,11 @@ Then configure your MCP client (see [MCP Integration](#mcp-integration) below).
 ### From Source (Recommended)
 
 ```bash
-git clone https://github.com/mikealkeal/osbot.git
-cd osbot
+git clone https://github.com/mikealkeal/oscribe.git
+cd oscribe
 npm install
 npm run build
-npm link  # Optional: makes 'osbot' command available globally
+npm link  # Optional: makes 'oscribe' command available globally
 ```
 
 ### Platform Support
@@ -92,45 +92,45 @@ npm link  # Optional: makes 'osbot' command available globally
 
 ### CLI Commands
 
-#### Vision-Based Clicking (The Core of OSbot!)
+#### Vision-Based Clicking (The Core of OScribe!)
 
 ```bash
-osbot click "Submit button"              # Click by description - the magic!
-osbot click "File menu"                  # Works on any visible element
-osbot click "Export as PNG" --screen 1   # Target specific monitor
-osbot click "Close" --dry-run            # Preview without clicking
+oscribe click "Submit button"              # Click by description - the magic!
+oscribe click "File menu"                  # Works on any visible element
+oscribe click "Export as PNG" --screen 1   # Target specific monitor
+oscribe click "Close" --dry-run            # Preview without clicking
 ```
 
 #### Input & Automation
 
 ```bash
-osbot type "hello world"                 # Type text
-osbot hotkey "ctrl+c"                    # Press keyboard shortcut
-osbot hotkey "ctrl+shift+esc"            # Multiple modifiers
+oscribe type "hello world"                 # Type text
+oscribe hotkey "ctrl+c"                    # Press keyboard shortcut
+oscribe hotkey "ctrl+shift+esc"            # Multiple modifiers
 ```
 
 #### Screenshots
 
 ```bash
-osbot screenshot                      # Capture primary screen
-osbot screenshot -o capture.png       # Save to file
-osbot screenshot --screen 1           # Capture second monitor
-osbot screenshot --list               # List available screens
-osbot screenshot --describe           # Describe screen content with AI
+oscribe screenshot                      # Capture primary screen
+oscribe screenshot -o capture.png       # Save to file
+oscribe screenshot --screen 1           # Capture second monitor
+oscribe screenshot --list               # List available screens
+oscribe screenshot --describe           # Describe screen content with AI
 ```
 
 #### Window Management
 
 ```bash
-osbot windows                         # List open windows
-osbot focus "Chrome"                  # Focus window by name
-osbot focus "Calculator"              # Works with partial matches
+oscribe windows                         # List open windows
+oscribe focus "Chrome"                  # Focus window by name
+oscribe focus "Calculator"              # Works with partial matches
 ```
 
 #### MCP Server
 
 ```bash
-osbot serve                          # Start MCP server (stdio transport)
+oscribe serve                          # Start MCP server (stdio transport)
 ```
 
 ### Global Options
@@ -146,21 +146,21 @@ osbot serve                          # Start MCP server (stdio transport)
 
 ```bash
 # Take screenshot and save
-osbot screenshot -o desktop.png
+oscribe screenshot -o desktop.png
 
 # Type with delay between keystrokes
-osbot type "slow typing" --delay 100
+oscribe type "slow typing" --delay 100
 
 # Use second monitor
-osbot screenshot --screen 1 --describe
+oscribe screenshot --screen 1 --describe
 
 # Dry run to see what would happen
-osbot type "test" --dry-run
+oscribe type "test" --dry-run
 ```
 
 ## MCP Integration
 
-OSbot exposes tools via [Model Context Protocol](https://modelcontextprotocol.io) for AI agents. Works with **Claude Desktop**, **Claude Code**, **Cursor**, **Windsurf**, and any MCP-compatible client.
+OScribe exposes tools via [Model Context Protocol](https://modelcontextprotocol.io) for AI agents. Works with **Claude Desktop**, **Claude Code**, **Cursor**, **Windsurf**, and any MCP-compatible client.
 
 ### Quick Setup
 
@@ -173,20 +173,20 @@ Edit your config file:
 | Windows | `%APPDATA%\Claude\claude_desktop_config.json`            |
 | macOS   | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
-Add OSbot to `mcpServers`:
+Add OScribe to `mcpServers`:
 
 ```json
 {
   "mcpServers": {
-    "osbot": {
+    "oscribe": {
       "command": "node",
-      "args": ["C:/path/to/osbot/dist/bin/osbot.js", "serve"]
+      "args": ["C:/path/to/oscribe/dist/bin/oscribe.js", "serve"]
     }
   }
 }
 ```
 
-> **Tip:** Replace `C:/path/to/osbot` with your actual installation path.
+> **Tip:** Replace `C:/path/to/oscribe` with your actual installation path.
 
 Then **restart Claude Desktop**. You'll see a 🔌 icon indicating MCP tools are available.
 
@@ -197,9 +197,9 @@ Add a `.mcp.json` file in your project root:
 ```json
 {
   "mcpServers": {
-    "osbot": {
+    "oscribe": {
       "command": "node",
-      "args": ["C:/path/to/osbot/dist/bin/osbot.js", "serve"]
+      "args": ["C:/path/to/oscribe/dist/bin/oscribe.js", "serve"]
     }
   }
 }
@@ -210,8 +210,8 @@ Add a `.mcp.json` file in your project root:
 ```json
 {
   "mcpServers": {
-    "osbot": {
-      "command": "osbot",
+    "oscribe": {
+      "command": "oscribe",
       "args": ["serve"]
     }
   }
@@ -255,7 +255,7 @@ Once configured, Claude can automate your desktop:
 
 ## Configuration
 
-Config directory: `~/.osbot/`
+Config directory: `~/.oscribe/`
 
 ### Files
 
@@ -286,7 +286,7 @@ Config directory: `~/.osbot/`
 
 ## How It Works
 
-OSbot uses a multi-layer approach for desktop automation (Windows):
+OScribe uses a multi-layer approach for desktop automation (Windows):
 
 1. **Screenshot Layer** - Captures screen using PowerShell + .NET System.Drawing
 
@@ -307,8 +307,8 @@ OSbot uses a multi-layer approach for desktop automation (Windows):
 ### Setup
 
 ```bash
-git clone https://github.com/mikealkeal/osbot.git
-cd osbot
+git clone https://github.com/mikealkeal/oscribe.git
+cd oscribe
 npm install
 ```
 
@@ -327,9 +327,9 @@ npm run clean       # Remove dist folder
 ### Project Structure
 
 ```
-osbot/
+oscribe/
 ├── bin/
-│   └── osbot.ts              # CLI entry point
+│   └── oscribe.ts              # CLI entry point
 ├── src/
 │   ├── core/
 │   │   ├── screenshot.ts     # Multi-platform screen capture
@@ -381,7 +381,7 @@ osbot/
 
 **Clicks not working:**
 
-- OSbot auto-detects swapped mouse buttons
+- OScribe auto-detects swapped mouse buttons
 - No manual configuration needed
 
 **UI elements not detected:**
@@ -396,10 +396,10 @@ Electron/Chromium apps require NVDA screen reader to expose their full accessibi
 
 ```bash
 # Install NVDA portable (one-time)
-osbot nvda install
+oscribe nvda install
 
 # Start NVDA silently (no audio)
-osbot nvda start
+oscribe nvda start
 ```
 
 Or via MCP tools: `os_nvda_install` → `os_nvda_start`
@@ -452,8 +452,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-- 🐛 **Bug reports**: [GitHub Issues](https://github.com/mikealkeal/osbot/issues)
-- 💬 **Questions**: [GitHub Discussions](https://github.com/mikealkeal/osbot/discussions)
+- 🐛 **Bug reports**: [GitHub Issues](https://github.com/mikealkeal/oscribe/issues)
+- 💬 **Questions**: [GitHub Discussions](https://github.com/mikealkeal/oscribe/discussions)
 - 📖 **Documentation**: This README + inline code comments
 
 ## Roadmap
@@ -467,7 +467,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Acknowledgements
 
-OSbot is built on top of these great open-source projects:
+OScribe is built on top of these great open-source projects:
 
 - [robotjs](https://github.com/octalmage/robotjs) - Native mouse/keyboard control
 - [screenshot-desktop](https://github.com/nicholasserra/screenshot-desktop) - Cross-platform screen capture

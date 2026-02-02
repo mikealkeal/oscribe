@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Validation script for OSbot
+# Validation script for OScribe
 # Tests all major functionality manually
 
 set -e
 
-echo "🔍 OSbot Validation Script"
+echo "🔍 OScribe Validation Script"
 echo "=========================="
 echo ""
 
@@ -41,12 +41,12 @@ echo -e "${GREEN}✅ Typecheck passed${NC}"
 
 echo ""
 echo "📋 4. Testing CLI help..."
-node dist/bin/osbot.js --help > /dev/null
+node dist/bin/oscribe.js --help > /dev/null
 echo -e "${GREEN}✅ CLI help works${NC}"
 
 echo ""
 echo "📸 5. Testing screenshot list..."
-if node dist/bin/osbot.js screenshot --list > /dev/null 2>&1; then
+if node dist/bin/oscribe.js screenshot --list > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Screenshot list works${NC}"
 else
     echo -e "${YELLOW}⚠️  Screenshot list failed (may need platform dependencies)${NC}"
@@ -54,7 +54,7 @@ fi
 
 echo ""
 echo "🪟 6. Testing windows list..."
-if node dist/bin/osbot.js windows > /dev/null 2>&1; then
+if node dist/bin/oscribe.js windows > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Windows list works${NC}"
 else
     echo -e "${YELLOW}⚠️  Windows list failed (may need platform dependencies)${NC}"
@@ -62,17 +62,17 @@ fi
 
 echo ""
 echo "🔐 7. Testing login status..."
-node dist/bin/osbot.js login --status || echo -e "${YELLOW}⚠️  Not logged in (expected)${NC}"
+node dist/bin/oscribe.js login --status || echo -e "${YELLOW}⚠️  Not logged in (expected)${NC}"
 
 echo ""
 echo "=========================="
 echo -e "${GREEN}✅ Core validation complete!${NC}"
 echo ""
 echo "📝 Manual tests needed:"
-echo "  • osbot init"
-echo "  • osbot login"
-echo "  • osbot screenshot --describe"
-echo "  • osbot click \"target\""
-echo "  • osbot type \"text\""
-echo "  • osbot serve (test MCP)"
+echo "  • oscribe init"
+echo "  • oscribe login"
+echo "  • oscribe screenshot --describe"
+echo "  • oscribe click \"target\""
+echo "  • oscribe type \"text\""
+echo "  • oscribe serve (test MCP)"
 echo ""

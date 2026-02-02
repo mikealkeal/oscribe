@@ -46,7 +46,7 @@ function getClient(): Anthropic {
   throw new Error(
     'Not authenticated. Options:\n' +
       '  1. Run "claude setup-token" and set CLAUDE_CODE_OAUTH_TOKEN\n' +
-      '  2. Run "osbot login --key sk-ant-xxx" with your API key'
+      '  2. Run "oscribe login --key sk-ant-xxx" with your API key'
   );
 }
 

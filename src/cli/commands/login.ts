@@ -22,7 +22,7 @@ export function loginCommand(): Command {
           console.log(chalk.gray(`  Key: ${key.slice(0, 12)}...`));
         } else {
           console.log(chalk.yellow('No API key configured.'));
-          console.log('Run: osbot login --key sk-ant-xxx');
+          console.log('Run: oscribe login --key sk-ant-xxx');
         }
         return;
       }
@@ -72,7 +72,7 @@ export function loginCommand(): Command {
       console.log(chalk.green('API key saved!'));
       console.log();
       console.log('Try:');
-      console.log(`  ${chalk.cyan('osbot screenshot --describe')}`);
-      console.log(`  ${chalk.cyan('osbot click "the Start button"')}`);
+      console.log(`  ${chalk.cyan('oscribe screenshot --describe')}`);
+      console.log(`  ${chalk.cyan('oscribe click "the Start button"')}`);
     });
 }
