@@ -12,7 +12,7 @@
  * - Result: 110+ UI elements detected vs 3 without NVDA
  *
  * License note:
- * - NVDA is GPL v2 - cannot be bundled with osbot (BSL 1.1)
+ * - NVDA is GPL v2 - cannot be bundled with oscribe (BSL 1.1)
  * - Downloaded on-demand as external tool, not distributed
  * - User must accept NVDA license when downloading
  */
@@ -47,7 +47,7 @@ const NVDA_DOWNLOAD_URL = 'https://download.nvaccess.org/releases/2025.3.2/nvda_
 const NVDA_VERSION = '2025.3.2';
 
 // Default paths (can be overridden via config.nvda.customPath)
-const TOOLS_DIR = join(homedir(), '.osbot', 'tools');
+const TOOLS_DIR = join(homedir(), '.oscribe', 'tools');
 const DEFAULT_NVDA_DIR = join(TOOLS_DIR, 'nvda');
 
 /**
@@ -63,12 +63,6 @@ function getNvdaPaths(): { dir: string; exe: string; configDir: string; configFi
     configFile: join(nvdaDir, 'userConfig', 'nvda.ini'),
   };
 }
-
-// Legacy constants for backward compatibility
-const NVDA_DIR = DEFAULT_NVDA_DIR;
-const NVDA_EXE = join(NVDA_DIR, 'nvda_noUIAccess.exe');
-const NVDA_CONFIG_DIR = join(NVDA_DIR, 'userConfig');
-const NVDA_CONFIG_FILE = join(NVDA_CONFIG_DIR, 'nvda.ini');
 
 // Silent config for NVDA - no audio output
 const SILENT_CONFIG = `schemaVersion = 13
@@ -188,7 +182,7 @@ export async function getNvdaStatus(): Promise<NvdaStatus> {
  * Download NVDA portable
  * Returns path to downloaded file
  */
-export async function downloadNvda(onProgress?: (percent: number) => void): Promise<string> {
+export async function downloadNvda(_onProgress?: (percent: number) => void): Promise<string> {
   // Ensure tools directory exists
   if (!existsSync(TOOLS_DIR)) {
     mkdirSync(TOOLS_DIR, { recursive: true });
@@ -282,18 +276,6 @@ export async function extractNvda(installerPath: string): Promise<void> {
 }
 
 /**
- * Check if 7z is available
- */
-async function check7zAvailable(): Promise<boolean> {
-  try {
-    await execAsync('7z', { timeout: 5000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Initialize NVDA - download and configure if needed
  * @param forceDownload - bypass autoDownload config check (for CLI install command)
  */
@@ -315,7 +297,7 @@ export async function initNvda(forceDownload = false): Promise<boolean> {
   // Check config before downloading
   const config = loadConfig();
   if (!forceDownload && !config.nvda.autoDownload) {
-    logger.warn('NVDA not installed. Run "osbot nvda install" to download.');
+    logger.warn('NVDA not installed. Run "oscribe nvda install" to download.');
     return false;
   }
 
@@ -354,7 +336,7 @@ export async function startNvda(autoInit = false): Promise<boolean> {
         return false;
       }
     } else {
-      logger.warn('NVDA not installed. Run "osbot nvda install" first.');
+      logger.warn('NVDA not installed. Run "oscribe nvda install" first.');
       return false;
     }
   }
@@ -445,7 +427,7 @@ export async function ensureNvdaForElectron(): Promise<boolean> {
   if (!isNvdaInstalled()) {
     if (!nvdaWarningShown) {
       logger.warn('NVDA not installed - Electron apps may show limited UI elements.');
-      logger.warn('Run "osbot nvda install" to enable full accessibility.');
+      logger.warn('Run "oscribe nvda install" to enable full accessibility.');
       nvdaWarningShown = true;
     }
 

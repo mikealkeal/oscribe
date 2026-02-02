@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { ensureNvdaForElectron, isNvdaRunning } from './nvda.js';
+import { ensureNvdaForElectron } from './nvda.js';
 
 const execAsync = promisify(exec);
 
@@ -391,7 +391,7 @@ if ($elements.Count -eq 0) { Write-Output '[]'; exit; }
 $elements | ConvertTo-Json -Depth 2 -Compress
 `;
 
-  const scriptPath = join(tmpdir(), `osbot-ui-${Date.now()}.ps1`);
+  const scriptPath = join(tmpdir(), `oscribe-ui-${Date.now()}.ps1`);
   try {
     writeFileSync(scriptPath, psScript, 'utf8');
     const { stdout } = await execAsync(
@@ -620,8 +620,8 @@ async function findMsaaElements(windowTitle: string): Promise<UIElement[]> {
     return []; // macOS/Linux not yet supported
   }
 
-  // Path to MsaaReader.exe (bundled with osbot)
-  // From dist/src/core/ go up 3 levels to reach osbot/, then into bin/
+  // Path to MsaaReader.exe (bundled with oscribe)
+  // From dist/src/core/ go up 3 levels to reach oscribe/, then into bin/
   const msaaReaderPath = join(__dirname, '..', '..', '..', 'bin', 'MsaaReader.exe');
 
   // Check if MsaaReader.exe exists
