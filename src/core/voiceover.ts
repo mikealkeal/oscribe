@@ -1,0 +1,247 @@
+/**
+ * VoiceOver Screen Reader Management
+ *
+ * Manages VoiceOver for Electron app accessibility on macOS.
+ * VoiceOver triggers Chromium/Electron to expose accessibility trees
+ * that are otherwise invisible to standard accessibility APIs.
+ *
+ * Why VoiceOver is needed:
+ * - Electron/Chromium only exposes its accessibility tree when a screen reader is detected
+ * - VoiceOver on macOS triggers this behavior system-wide
+ * - Without it, Electron apps show minimal UI elements (3-5 instead of 100+)
+ *
+ * Platform note:
+ * - This module only works on macOS (darwin)
+ * - On Windows/Linux, all functions return false/no-op
+ */
+
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
+
+const isMacOS = process.platform === 'darwin';
+
+// Simple logger for VoiceOver module
+const logger = {
+  debug: (msg: string, data?: Record<string, unknown>) => {
+    if (process.env['DEBUG']) console.log(`[voiceover] ${msg}`, data ?? '');
+  },
+  info: (msg: string, data?: Record<string, unknown>) => {
+    console.log(`[voiceover] ${msg}`, data ?? '');
+  },
+  warn: (msg: string, data?: Record<string, unknown>) => {
+    console.warn(`[voiceover] ${msg}`, data ?? '');
+  },
+  error: (msg: string, data?: Record<string, unknown>) => {
+    console.error(`[voiceover] ${msg}`, data ?? '');
+  },
+};
+
+export interface VoiceOverStatus {
+  available: boolean;
+  running: boolean;
+  canControl: boolean;
+  platform: string;
+}
+
+/**
+ * Check if VoiceOver is available on this system
+ * Only available on macOS
+ */
+export function isVoiceOverAvailable(): boolean {
+  return isMacOS;
+}
+
+/**
+ * Check if VoiceOver is currently running
+ */
+export async function isVoiceOverRunning(): Promise<boolean> {
+  if (!isMacOS) {
+    return false;
+  }
+
+  try {
+    const { stdout } = await execAsync(
+      `osascript -e 'tell application "System Events" to return (name of processes) contains "VoiceOver"'`
+    );
+    return stdout.trim().toLowerCase() === 'true';
+  } catch {
+    logger.debug('Failed to check VoiceOver status');
+    return false;
+  }
+}
+
+/**
+ * Start VoiceOver
+ * @param silent - If true, mute speech output (keep accessibility tree access)
+ */
+export async function startVoiceOver(silent = false): Promise<boolean> {
+  if (!isMacOS) {
+    logger.debug('VoiceOver only available on macOS');
+    return false;
+  }
+
+  try {
+    // Check if already running
+    if (await isVoiceOverRunning()) {
+      logger.debug('VoiceOver already running');
+      if (silent) {
+        await muteVoiceOver();
+      }
+      return true;
+    }
+
+    logger.info('Starting VoiceOver...');
+
+    // Start VoiceOver using AppleScript
+    await execAsync(
+      `osascript -e 'tell application "System Events" to key code 96 using {command down, option down}'`
+    );
+
+    // Wait for VoiceOver to start
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Verify it started
+    const running = await isVoiceOverRunning();
+    if (!running) {
+      logger.warn('VoiceOver did not start');
+      return false;
+    }
+
+    // Mute if requested
+    if (silent) {
+      await muteVoiceOver();
+    }
+
+    logger.info('VoiceOver started successfully');
+    return true;
+  } catch (error) {
+    logger.error('Failed to start VoiceOver', { error: String(error) });
+    return false;
+  }
+}
+
+/**
+ * Stop VoiceOver
+ * @param restoreSpeech - If true, unmute before stopping
+ */
+export async function stopVoiceOver(restoreSpeech = false): Promise<boolean> {
+  if (!isMacOS) {
+    return true; // No-op on non-macOS
+  }
+
+  try {
+    if (!(await isVoiceOverRunning())) {
+      logger.debug('VoiceOver not running');
+      return true;
+    }
+
+    if (restoreSpeech) {
+      await unmuteVoiceOver();
+    }
+
+    logger.info('Stopping VoiceOver...');
+
+    // Stop VoiceOver using the same shortcut (toggle)
+    await execAsync(
+      `osascript -e 'tell application "System Events" to key code 96 using {command down, option down}'`
+    );
+
+    // Wait for VoiceOver to stop
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    logger.info('VoiceOver stopped');
+    return true;
+  } catch (error) {
+    logger.error('Failed to stop VoiceOver', { error: String(error) });
+    return false;
+  }
+}
+
+/**
+ * Get VoiceOver status
+ */
+export async function getVoiceOverStatus(): Promise<VoiceOverStatus> {
+  const canControl = await checkAccessibilityPermissions();
+  return {
+    available: isVoiceOverAvailable(),
+    running: await isVoiceOverRunning(),
+    canControl,
+    platform: process.platform,
+  };
+}
+
+/**
+ * Check if we have accessibility permissions to control VoiceOver
+ */
+async function checkAccessibilityPermissions(): Promise<boolean> {
+  if (!isMacOS) {
+    return false;
+  }
+
+  try {
+    // Try to check if System Events can be controlled
+    const { stdout } = await execAsync(
+      `osascript -e 'tell application "System Events" to return true'`
+    );
+    return stdout.trim().toLowerCase() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure VoiceOver is running for Electron app accessibility
+ * Starts VoiceOver in silent mode if not already running
+ * Used by uiautomation.ts for Electron apps with low element counts
+ */
+export async function ensureVoiceOverForElectron(): Promise<boolean> {
+  if (!isMacOS) {
+    return false;
+  }
+
+  // Check if already running
+  if (await isVoiceOverRunning()) {
+    logger.debug('VoiceOver already running for Electron');
+    return true;
+  }
+
+  // Start in silent mode
+  return startVoiceOver(true);
+}
+
+/**
+ * Mute VoiceOver speech output
+ * Keeps accessibility tree access but silences audio
+ */
+async function muteVoiceOver(): Promise<void> {
+  if (!isMacOS) return;
+
+  try {
+    // Use VoiceOver Commander to mute speech
+    // Ctrl+Option+S toggles speech
+    await execAsync(
+      `osascript -e 'tell application "System Events" to key code 1 using {control down, option down}'`
+    );
+    logger.debug('VoiceOver speech muted');
+  } catch {
+    logger.debug('Failed to mute VoiceOver');
+  }
+}
+
+/**
+ * Unmute VoiceOver speech output
+ */
+async function unmuteVoiceOver(): Promise<void> {
+  if (!isMacOS) return;
+
+  try {
+    await execAsync(
+      `osascript -e 'tell application "System Events" to key code 1 using {control down, option down}'`
+    );
+    logger.debug('VoiceOver speech unmuted');
+  } catch {
+    logger.debug('Failed to unmute VoiceOver');
+  }
+}

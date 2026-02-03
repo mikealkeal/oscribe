@@ -168,7 +168,8 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
     // NVDA must be running to trigger Chromium's accessibility tree
     if (elements.length < 10) {
       // Ensure NVDA is running for Electron accessibility
-      await ensureNvdaForElectron();
+      // forceInstall=true to auto-download NVDA when needed (40MB one-time)
+      await ensureNvdaForElectron(true);
 
       const msaaElements = await findMsaaElements(windowInfo.name);
       if (msaaElements.length > elements.length) {
