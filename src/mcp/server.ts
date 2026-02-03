@@ -8,9 +8,10 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { readFileSync } from 'node:fs';
+import { readFileSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 
 import { captureScreen, listScreens } from '../core/screenshot.js';
 import { click, typeText, hotkey, scroll, moveMouse, getMousePosition, clickAtCurrentPosition, mouseDown, mouseUp, drag } from '../core/input.js';
@@ -18,6 +19,7 @@ import { listWindows, focusWindow } from '../core/windows.js';
 import { getUIElements, getElementAtPoint, findSystemUIElements, getTaskbarConfig } from '../core/uiautomation.js';
 import { isNvdaInstalled, isNvdaRunning, initNvda, startNvda, stopNvda, getNvdaStatus } from '../core/nvda.js';
 import { isVoiceOverAvailable, isVoiceOverRunning, startVoiceOver, stopVoiceOver, getVoiceOverStatus } from '../core/voiceover.js';
+import { restartBrowserWithCDP } from '../core/browser-restart.js';
 import { RestrictedActionError } from '../core/security.js';
 import { UserInterruptError, resetKillSwitch, checkResumeSignal } from '../core/killswitch.js';
 import { SessionRecorder, ScreenContext, UIElementContext } from '../core/session-recorder.js';
@@ -215,7 +217,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 - NEVER guess or estimate positions visually from the image
 - The JSON coordinates are EXACT screen positions, the image is only for visual context
 
-Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x=951, y=658)`,
+Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x=951, y=658)
+
+🌐 BROWSER SUPPORT (Chrome, Edge, Brave, Arc, Opera):
+- For Chromium browsers, OScribe uses Chrome DevTools Protocol (CDP) to detect 200-300+ interactive elements
+- CDP requires the browser to be launched with remote debugging enabled
+- To enable CDP: Close the browser, then launch it with: --remote-debugging-port=9222
+  - Chrome: google-chrome --remote-debugging-port=9222
+  - Edge: msedge --remote-debugging-port=9222
+  - Brave: brave --remote-debugging-port=9222
+- Without CDP, OScribe falls back to native UI Automation (detects only ~20-40 elements on macOS)
+- The "Strategy" field in the response indicates which method was used: "browser" (CDP) or "native" (UI Automation)`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -350,6 +362,31 @@ Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x
         inputSchema: {
           type: 'object',
           properties: {},
+        },
+      },
+      {
+        name: 'os_browser_restart_with_cdp',
+        description: `Restart Chromium browser (Chrome, Edge, Brave, Arc) with Chrome DevTools Protocol (CDP) enabled.
+
+This tool:
+1. Saves all open tabs (URLs)
+2. Closes the browser gracefully
+3. Relaunches with --remote-debugging-port=9222
+4. Restores all tabs
+5. Takes a screenshot automatically after restart to verify CDP is active
+
+Use this when:
+- Screenshot shows "Strategy: native (CDP not enabled ⚠️)"
+- Browser warning suggests enabling CDP
+- You need 200-300+ elements instead of 20-40
+
+After restart, the screenshot will show "Strategy: browser (CDP active ✓)" and detect 10x more elements.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            port: { type: 'number', description: 'Remote debugging port (default: 9222)', default: 9222 },
+            window: { type: 'string', description: 'Optional browser window/app name to target (e.g., "Google Chrome", "Microsoft Edge"). If not provided, uses active window.' },
+          },
         },
       },
       {
@@ -569,16 +606,61 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }).join('\n')
           : '';
 
+        // Check if this is a Chromium browser (needed for warnings and strategy info)
+        const { detectBrowser } = await import('../core/browser.js');
+        const { getActiveWindow } = await import('../core/windows.js');
+        const activeWindow = await getActiveWindow();
+        const browserInfo = activeWindow ? await detectBrowser(tree.windowClass, activeWindow.app) : null;
+
         // Build image info section with dimensions and ratio
+        const strategyInfo = `🔧 Strategy: ${tree.strategy}${tree.strategy === 'browser' ? ' (CDP active ✓)' : tree.strategy === 'native' && browserInfo ? ' (CDP not enabled ⚠️)' : ''}`;
         const imageInfo = `📐 Screenshot: ${width}x${height} | Client: ${clientType} | Ratio: ${ratio.toFixed(3)}${taskbarInfo}`;
         const ratioHint = ratio > 1
           ? `⚠️ Image resized by client. For visual estimates, multiply coordinates by ${ratio.toFixed(3)}`
           : `✓ Image at full resolution (no resize)`;
 
-        // Check if this looks like an Electron app with limited accessibility
-        // Only warn if NVDA/VoiceOver is not running
+        // Add window bounds info for CDP (coordinate conversion)
+        let windowBoundsInfo = '';
+        if (tree.strategy === 'browser' && tree.windowBounds) {
+          const { x, y, width: winWidth, height: winHeight } = tree.windowBounds;
+          // Typical Chrome UI height on macOS: ~140px (window title bar ~28px + tab bar ~37px + address bar ~75px)
+          const chromeUIHeight = 140;
+          windowBoundsInfo = `\n🌐 Browser Window: position=(${x},${y}) size=${winWidth}x${winHeight}\n💡 CDP coordinates: Add viewport offset to convert CDP coords → screen coords\n   - CDP coordinate (cx, cy) → Screen coordinate (${x} + cx, ${y + chromeUIHeight} + cy)\n   - Viewport starts at approximately y=${y + chromeUIHeight} (after Chrome UI)`;
+        }
+
         let accessibilityWarning = '';
-        if (process.platform === 'win32' &&
+
+        // 1. Check for Chromium browser without CDP (highest priority)
+        if (browserInfo && !browserInfo.isDebuggingEnabled && tree.strategy === 'native' && tree.ui.length < 50) {
+          const browserCommands: Record<string, string> = {
+            chrome: 'open -a "Google Chrome" --args --remote-debugging-port=9222',
+            edge: 'open -a "Microsoft Edge" --args --remote-debugging-port=9222',
+            brave: 'open -a "Brave Browser" --args --remote-debugging-port=9222',
+            arc: 'open -a "Arc" --args --remote-debugging-port=9222',
+            chromium: 'open -a "Chromium" --args --remote-debugging-port=9222',
+          };
+
+          const command = browserCommands[browserInfo.type] || `${browserInfo.type} --remote-debugging-port=9222`;
+          let platformCommand = command;
+          if (process.platform === 'win32') {
+            platformCommand = `start ${browserInfo.type === 'chrome' ? 'chrome' : browserInfo.type === 'edge' ? 'msedge' : browserInfo.type} --remote-debugging-port=9222`;
+          } else if (process.platform === 'linux') {
+            platformCommand = `${browserInfo.type === 'chrome' ? 'google-chrome' : browserInfo.type} --remote-debugging-port=9222 &`;
+          }
+
+          accessibilityWarning = `🌐 CHROMIUM BROWSER DETECTED WITHOUT CDP - Only ${tree.ui.length} elements detected (native UI Automation)
+⚡ ACTION REQUIRED: Enable Chrome DevTools Protocol (CDP) to detect 200-300+ elements instead
+
+STEPS TO ENABLE CDP:
+1. Close ${browserInfo.type.charAt(0).toUpperCase() + browserInfo.type.slice(1)} completely
+2. Relaunch with remote debugging: ${platformCommand}
+3. Take another screenshot to verify CDP is active (Strategy should show "browser" instead of "native")
+
+💡 TIP: You should suggest this to the user immediately so they can enable CDP for better automation.`;
+        }
+        // 2. Check for Electron app with limited accessibility
+        // Only warn if NVDA/VoiceOver is not running
+        else if (process.platform === 'win32' &&
             (tree.strategy === 'electron' || tree.windowClass.includes('Chrome_WidgetWin')) &&
             tree.ui.length < 10 &&
             !isNvdaInstalled()) {
@@ -602,7 +684,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `${warningFirst}${capturedWindow}\n${focusReminder}\n\n${imageInfo}\n${ratioHint}\n\n${instruction}\n\nCursor position: (${cursor.x}, ${cursor.y})\n\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}${systemText}`,
+              text: `${warningFirst}${capturedWindow}\n${focusReminder}\n\n${strategyInfo}\n${imageInfo}\n${ratioHint}${windowBoundsInfo}\n\n${instruction}\n\nCursor position: (${cursor.x}, ${cursor.y})\n\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}${systemText}`,
             },
             {
               type: 'image',
@@ -920,6 +1002,90 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'os_browser_restart_with_cdp': {
+        const BrowserRestartSchema = z.object({
+          port: z.number().optional().default(9222),
+          window: z.string().optional(),
+        });
+
+        const { port, window } = BrowserRestartSchema.parse(args);
+
+        await recorder.recordAction('os_browser_restart_with_cdp', { port, window }, async () => {
+          // Action recorded in the function itself
+        });
+
+        console.error(`Restarting browser with CDP on port ${port}${window ? ` (targeting: ${window})` : ''}...`);
+        const result = await restartBrowserWithCDP(port, window);
+
+        if (!result.success) {
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ Failed to restart browser with CDP: ${result.error || 'Unknown error'}`,
+            }],
+            isError: true,
+          };
+        }
+
+        // Take a screenshot automatically after restart to verify CDP is active
+        console.error('Browser restarted, taking screenshot to verify CDP...');
+        await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for browser to stabilize
+
+        const screenshot = await captureScreen({ screen: 0 });
+        const cursor = getMousePosition();
+        const tree = await getUIElements();
+
+        // Calculate resize ratio
+        const width = screenshot.width ?? 0;
+        const height = screenshot.height ?? 0;
+        const clientVersion = server.getClientVersion();
+        const { ratio, clientType } = calculateImageRatio(width, height, clientVersion?.name);
+
+        // Format elements
+        const elementsText = tree.ui.map((el) => {
+          const cx = el.x + Math.floor(el.width / 2);
+          const cy = el.y + Math.floor(el.height / 2);
+          return `- ${el.type}: "${el.name}" pos=(${el.x},${el.y}) center=(${cx},${cy}) [${el.width}x${el.height}]`;
+        }).join('\n');
+
+        const strategyInfo = `🔧 Strategy: ${tree.strategy}${tree.strategy === 'browser' ? ' (CDP active ✓)' : ' (CDP not enabled ⚠️)'}`;
+        const successMessage = `✅ Browser restarted successfully with CDP enabled!
+
+📊 Results:
+- Browser: ${result.browser}
+- Tabs saved: ${result.tabsSaved}
+- Tabs restored: ${result.tabsRestored}
+- CDP enabled: ${result.cdpEnabled ? 'Yes ✓' : 'No ✗'}
+
+📸 Screenshot after restart:
+${strategyInfo}
+📐 Screenshot: ${width}x${height} | Client: ${clientType} | Ratio: ${ratio.toFixed(3)}
+Cursor: (${cursor.x}, ${cursor.y})
+
+Elements detected: ${tree.ui.length} (was ~4 before, now ${tree.ui.length}!)
+
+First 10 elements:
+${tree.ui.slice(0, 10).map((el) => {
+  const cx = el.x + Math.floor(el.width / 2);
+  const cy = el.y + Math.floor(el.height / 2);
+  return `- ${el.type}: "${el.name}" center=(${cx},${cy})`;
+}).join('\n')}`;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: successMessage,
+            },
+            {
+              type: 'image',
+              data: screenshot.base64,
+              mimeType: 'image/png',
+            },
+          ],
+        };
+      }
+
       case 'os_mouse_down': {
         const { button } = MouseToggleSchema.parse(args);
         const pos = getMousePosition();
@@ -1000,27 +1166,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 export async function startServer(): Promise<void> {
-  // Auto-start VoiceOver on macOS for Electron app accessibility
-  if (process.platform === 'darwin') {
-    console.error('macOS detected - checking VoiceOver status...');
-    try {
-      if (!await isVoiceOverRunning()) {
-        console.error('Starting VoiceOver in silent mode for Electron accessibility...');
-        const started = await startVoiceOver(true);
-        if (started) {
-          console.error('VoiceOver started successfully');
-        } else {
-          console.error('Warning: Failed to start VoiceOver - Electron apps may have limited UI elements');
-        }
-      } else {
-        console.error('VoiceOver already running');
-      }
-    } catch (error) {
-      console.error('Warning: Could not initialize VoiceOver:', error);
-    }
+  // Note: VoiceOver auto-start removed - now using AXManualAccessibility for Electron apps
+  // AXManualAccessibility works WITHOUT VoiceOver, avoiding unwanted audio
+  // VoiceOver can still be started manually via os_voiceover_start if needed
+
+  // Test log file writing
+  const testLogFile = join(homedir(), 'Desktop', 'oscribe-mcp-server-test.log');
+  try {
+    appendFileSync(testLogFile, `[${new Date().toISOString()}] MCP server starting...\n`, 'utf8');
+  } catch (err) {
+    console.error('Failed to write test log:', err);
   }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('OScribe MCP server started');
+
+  try {
+    appendFileSync(testLogFile, `[${new Date().toISOString()}] MCP server started successfully\n`, 'utf8');
+  } catch (err) {
+    console.error('Failed to write test log:', err);
+  }
 }

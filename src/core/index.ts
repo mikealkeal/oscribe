@@ -11,6 +11,12 @@ export * from './automation.js';
 export * from './uiautomation.js';
 export * from './nvda.js';
 export * from './voiceover.js';
+export * from './axmanual.js';
+// Browser CDP modules
+export * from './browser.js';
+export * from './cdp-client.js';
+export * from './cdp-elements.js';
+export * from './browser-restart.js';
 // Security modules
 export * from './logger.js';
 export * from './security.js';

@@ -94,8 +94,14 @@ npm link  # Optional: makes 'oscribe' command available globally
 
 - Native screencapture command
 - UI Automation via AXUIElement API (`ax-reader` binary)
-- Requires: **Accessibility permissions** (System Preferences → Security & Privacy → Privacy → Accessibility)
-- Add Terminal or your IDE to allowed apps
+- Requires: **Accessibility permissions** (System Settings → Privacy & Security → Accessibility)
+  - Add Terminal or your IDE to allowed apps
+  - **IMPORTANT for VSCode users**: You must also authorize VSCode in "App Management" (Login Items & Extensions)
+    1. Open System Settings → General → Login Items & Extensions
+    2. Find "Visual Studio Code"
+    3. Toggle ON the switch
+    4. Enter your password or use Touch ID to confirm
+    5. This is required for OScribe MCP to control your system from Claude Code
 - Native apps (Chrome, Safari, Finder) work well
 - Electron apps (VS Code, etc.) have limited element detection (same as Windows without NVDA)
 

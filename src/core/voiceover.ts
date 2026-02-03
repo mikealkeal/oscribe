@@ -83,31 +83,77 @@ export async function startVoiceOver(silent = false): Promise<boolean> {
   }
 
   try {
-    // Check if already running
+    // If VoiceOver is already running, stop it first to apply new preferences
     if (await isVoiceOverRunning()) {
-      logger.debug('VoiceOver already running');
-      return true;
+      logger.debug('VoiceOver already running, restarting to apply preferences...');
+      await execAsync('killall VoiceOver');
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     logger.info('Starting VoiceOver...');
 
     // Configure speech settings BEFORE starting VoiceOver
+    // VoiceOver MUST be stopped when we write these preferences
+    // Write to BOTH preference domains to ensure settings are applied
     if (silent) {
-      await execAsync('defaults write com.apple.VoiceOver4.default SCREnableSpeech -int 0');
-      logger.debug('VoiceOver speech disabled in preferences');
+      // Set volume to 0 in both preference domains
+      await execAsync('defaults write com.apple.VoiceOver4.default SCRAudioVolume -float 0.0');
+      await execAsync('defaults write com.apple.VoiceOver SCRAudioVolume -float 0.0');
+
+      // Force macOS to sync the preferences to disk
+      await execAsync('killall -u $(whoami) cfprefsd');
+
+      logger.debug('VoiceOver audio volume set to 0 in both preference domains');
+    } else {
+      // Restore volume to default (0.8) in both preference domains
+      await execAsync('defaults write com.apple.VoiceOver4.default SCRAudioVolume -float 0.8');
+      await execAsync('defaults write com.apple.VoiceOver SCRAudioVolume -float 0.8');
+
+      // Force macOS to sync the preferences to disk
+      await execAsync('killall -u $(whoami) cfprefsd');
+
+      logger.debug('VoiceOver audio volume restored to 0.8 in both preference domains');
     }
 
     // Start VoiceOver using open command (more reliable than AppleScript)
     await execAsync('open -a VoiceOver');
 
-    // Wait for VoiceOver to start (needs time to initialize)
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    // Wait for VoiceOver to start with retry logic
+    // macOS Sequoia 15.x can take 6-10 seconds to start VoiceOver
+    let running = false;
+    const maxAttempts = 10;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      running = await isVoiceOverRunning();
+      if (running) {
+        logger.debug(`VoiceOver started after ${i + 1} seconds`);
+        break;
+      }
+    }
 
-    // Verify it started
-    const running = await isVoiceOverRunning();
     if (!running) {
-      logger.warn('VoiceOver did not start');
+      logger.warn('VoiceOver did not start after 10 seconds');
       return false;
+    }
+
+    // If silent mode requested, mute VoiceOver after it starts
+    // Use keyboard shortcuts to control volume (VO + Command + Down Arrow to decrease)
+    if (silent) {
+      logger.debug('Muting VoiceOver audio using keyboard shortcuts...');
+
+      // Wait for VoiceOver to fully initialize
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Send VO+Command+Down Arrow 10 times to set volume to 0
+      // VO = Control+Option
+      for (let i = 0; i < 10; i++) {
+        await execAsync(
+          'osascript -e \'tell application "System Events" to keystroke (ASCII character 31) using {control down, option down, command down}\''
+        );
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      logger.debug('VoiceOver volume muted via keyboard shortcuts');
     }
 
     logger.info('VoiceOver started successfully');
@@ -134,8 +180,9 @@ export async function stopVoiceOver(restoreSpeech = false): Promise<boolean> {
     }
 
     if (restoreSpeech) {
-      await execAsync('defaults write com.apple.VoiceOver4.default SCREnableSpeech -int 1');
-      logger.debug('VoiceOver speech re-enabled in preferences');
+      // Re-enable speech by unchecking "Mute speech"
+      await execAsync('defaults write com.apple.VoiceOver4.default SCRMuteSpeech -int 0');
+      logger.debug('VoiceOver speech unmuted in preferences (SCRMuteSpeech=0)');
     }
 
     logger.info('Stopping VoiceOver...');
