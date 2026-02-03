@@ -11,7 +11,6 @@ export * from './automation.js';
 export * from './uiautomation.js';
 export * from './nvda.js';
 export * from './voiceover.js';
-export * from './accessibility.js';
 // Security modules
 export * from './logger.js';
 export * from './security.js';
