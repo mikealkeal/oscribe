@@ -18,7 +18,6 @@ import { listWindows, focusWindow } from '../core/windows.js';
 import { getUIElements, getElementAtPoint, findSystemUIElements, getTaskbarConfig } from '../core/uiautomation.js';
 import { isNvdaInstalled, isNvdaRunning, initNvda, startNvda, stopNvda, getNvdaStatus } from '../core/nvda.js';
 import { isVoiceOverAvailable, isVoiceOverRunning, startVoiceOver, stopVoiceOver, getVoiceOverStatus } from '../core/voiceover.js';
-import { getAccessibilityTree, findAccessibilityElement } from '../core/accessibility.js';
 import { RestrictedActionError } from '../core/security.js';
 import { UserInterruptError, resetKillSwitch } from '../core/killswitch.js';
 import { SessionRecorder, ScreenContext, UIElementContext } from '../core/session-recorder.js';
@@ -146,30 +145,6 @@ const DragSchema = z.object({
   button: z.enum(['left', 'right', 'middle']).default('left').describe('Mouse button (default: left)'),
   duration: z.number().default(500).describe('Duration of drag in ms (default: 500)'),
 });
-
-const AccessibilityTreeSchema = z.object({
-  // No parameters needed - always extracts frontmost window
-});
-
-const FindElementSchema = z.object({
-  query: z.string().describe('Search query (matched against value, title, description)'),
-  role: z.string().optional().describe('Optional role filter (e.g., "AXButton", "AXTextField")'),
-});
-
-/**
- * Recursively count elements in accessibility tree
- */
-function countElements(tree: { children: unknown[] }): number {
-  let count = 1; // Current element
-  if (Array.isArray(tree.children)) {
-    for (const child of tree.children) {
-      if (child && typeof child === 'object' && 'children' in child) {
-        count += countElements(child as { children: unknown[] });
-      }
-    }
-  }
-  return count;
-}
 
 // Session recorder - initialized on first action
 let sessionRecorder: SessionRecorder | null = null;
@@ -375,26 +350,6 @@ Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x
         inputSchema: {
           type: 'object',
           properties: {},
-        },
-      },
-      {
-        name: 'os_accessibility_tree',
-        description: 'Extract complete accessibility tree for the frontmost window (macOS only). Returns all UI elements with their roles, positions, values. Use this BEFORE os_screenshot to get exact element coordinates for free (no tokens). Much faster and more precise than vision.',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'os_find_element',
-        description: 'Search for an element in the accessibility tree (macOS only). Finds elements by value, title, or description. Returns exact coordinates. Use this to locate elements without vision API calls.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Search query (matched against value, title, description)' },
-            role: { type: 'string', description: 'Optional role filter (e.g., "AXButton", "AXTextField")' },
-          },
-          required: ['query'],
         },
       },
       {
@@ -959,116 +914,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }],
           isError: !success,
         };
-      }
-
-      case 'os_accessibility_tree': {
-        if (process.platform !== 'darwin') {
-          return {
-            content: [{ type: 'text', text: 'Accessibility tree extraction is only available on macOS.' }],
-          };
-        }
-
-        try {
-          const tree = await getAccessibilityTree();
-
-          // Format tree info for display
-          const elementCount = countElements(tree);
-          const treeJson = JSON.stringify(tree, null, 2);
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `🌳 Accessibility Tree extracted (${elementCount} elements)
-
-Root: ${tree.role} at ${tree.absolute_position || 'unknown'} [${tree.size || 'unknown'}]
-
-💡 TIP: Use os_find_element to search for specific elements by name/value.
-
-Full tree (JSON):
-\`\`\`json
-${treeJson.substring(0, 5000)}${treeJson.length > 5000 ? '\n... (truncated)' : ''}
-\`\`\``,
-              },
-            ],
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `❌ Failed to extract accessibility tree: ${error instanceof Error ? error.message : String(error)}`,
-              },
-            ],
-          };
-        }
-      }
-
-      case 'os_find_element': {
-        if (process.platform !== 'darwin') {
-          return {
-            content: [{ type: 'text', text: 'Element finding is only available on macOS.' }],
-          };
-        }
-
-        const { query, role } = FindElementSchema.parse(args);
-
-        try {
-          // First extract the tree
-          const tree = await getAccessibilityTree();
-
-          // Search for element
-          const element = findAccessibilityElement(tree, query, role);
-
-          if (!element || !element.position) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `❌ Element not found: "${query}"${role ? ` (role: ${role})` : ''}
-
-Try:
-- Broader search query
-- Check if element is visible in frontmost window
-- Use os_accessibility_tree to see all available elements`,
-                },
-              ],
-            };
-          }
-
-          // Calculate center for clicking
-          const centerX = Math.floor(element.position.x + (element.position.width || 0) / 2);
-          const centerY = Math.floor(element.position.y + (element.position.height || 0) / 2);
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `✅ Element found: "${query}"
-
-- Role: ${element.role}
-- Title: ${element.title || 'N/A'}
-- Value: ${element.value || 'N/A'}
-- Position: (${element.position.x}, ${element.position.y})
-- Size: ${element.position.width || 'N/A'}x${element.position.height || 'N/A'}
-- Center: (${centerX}, ${centerY}) ← Use with os_click_at
-- Enabled: ${element.enabled ? 'Yes' : 'No'}
-- Path: ${element.path}
-
-💡 To click: os_click_at(x=${centerX}, y=${centerY})`,
-              },
-            ],
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `❌ Failed to find element: ${error instanceof Error ? error.message : String(error)}`,
-              },
-            ],
-          };
-        }
       }
 
       case 'os_mouse_down': {
