@@ -1000,6 +1000,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 export async function startServer(): Promise<void> {
+  // Auto-start VoiceOver on macOS for Electron app accessibility
+  if (process.platform === 'darwin') {
+    console.error('macOS detected - checking VoiceOver status...');
+    try {
+      if (!await isVoiceOverRunning()) {
+        console.error('Starting VoiceOver in silent mode for Electron accessibility...');
+        const started = await startVoiceOver(true);
+        if (started) {
+          console.error('VoiceOver started successfully');
+        } else {
+          console.error('Warning: Failed to start VoiceOver - Electron apps may have limited UI elements');
+        }
+      } else {
+        console.error('VoiceOver already running');
+      }
+    } catch (error) {
+      console.error('Warning: Could not initialize VoiceOver:', error);
+    }
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('OScribe MCP server started');

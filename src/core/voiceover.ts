@@ -86,32 +86,28 @@ export async function startVoiceOver(silent = false): Promise<boolean> {
     // Check if already running
     if (await isVoiceOverRunning()) {
       logger.debug('VoiceOver already running');
-      if (silent) {
-        await muteVoiceOver();
-      }
       return true;
     }
 
     logger.info('Starting VoiceOver...');
 
-    // Start VoiceOver using AppleScript
-    await execAsync(
-      `osascript -e 'tell application "System Events" to key code 96 using {command down, option down}'`
-    );
+    // Configure speech settings BEFORE starting VoiceOver
+    if (silent) {
+      await execAsync('defaults write com.apple.VoiceOver4.default SCREnableSpeech -int 0');
+      logger.debug('VoiceOver speech disabled in preferences');
+    }
 
-    // Wait for VoiceOver to start
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Start VoiceOver using open command (more reliable than AppleScript)
+    await execAsync('open -a VoiceOver');
+
+    // Wait for VoiceOver to start (needs time to initialize)
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     // Verify it started
     const running = await isVoiceOverRunning();
     if (!running) {
       logger.warn('VoiceOver did not start');
       return false;
-    }
-
-    // Mute if requested
-    if (silent) {
-      await muteVoiceOver();
     }
 
     logger.info('VoiceOver started successfully');
@@ -138,15 +134,14 @@ export async function stopVoiceOver(restoreSpeech = false): Promise<boolean> {
     }
 
     if (restoreSpeech) {
-      await unmuteVoiceOver();
+      await execAsync('defaults write com.apple.VoiceOver4.default SCREnableSpeech -int 1');
+      logger.debug('VoiceOver speech re-enabled in preferences');
     }
 
     logger.info('Stopping VoiceOver...');
 
-    // Stop VoiceOver using the same shortcut (toggle)
-    await execAsync(
-      `osascript -e 'tell application "System Events" to key code 96 using {command down, option down}'`
-    );
+    // Stop VoiceOver using killall (more reliable)
+    await execAsync('killall VoiceOver');
 
     // Wait for VoiceOver to stop
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -211,37 +206,3 @@ export async function ensureVoiceOverForElectron(): Promise<boolean> {
   return startVoiceOver(true);
 }
 
-/**
- * Mute VoiceOver speech output
- * Keeps accessibility tree access but silences audio
- */
-async function muteVoiceOver(): Promise<void> {
-  if (!isMacOS) return;
-
-  try {
-    // Use VoiceOver Commander to mute speech
-    // Ctrl+Option+S toggles speech
-    await execAsync(
-      `osascript -e 'tell application "System Events" to key code 1 using {control down, option down}'`
-    );
-    logger.debug('VoiceOver speech muted');
-  } catch {
-    logger.debug('Failed to mute VoiceOver');
-  }
-}
-
-/**
- * Unmute VoiceOver speech output
- */
-async function unmuteVoiceOver(): Promise<void> {
-  if (!isMacOS) return;
-
-  try {
-    await execAsync(
-      `osascript -e 'tell application "System Events" to key code 1 using {control down, option down}'`
-    );
-    logger.debug('VoiceOver speech unmuted');
-  } catch {
-    logger.debug('Failed to unmute VoiceOver');
-  }
-}
