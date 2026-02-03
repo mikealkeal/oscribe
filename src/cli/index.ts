@@ -17,6 +17,7 @@ import { tokensCommand } from './commands/tokens.js';
 import { gifCommand } from './commands/gif.js';
 import { nvdaCommand } from './commands/nvda.js';
 import { killswitchCommand } from './commands/killswitch.js';
+import { voiceoverCommand } from './commands/voiceover.js';
 
 export function registerCommands(program: Command): void {
   program.addCommand(initCommand());
@@ -33,4 +34,5 @@ export function registerCommands(program: Command): void {
   program.addCommand(gifCommand());
   program.addCommand(nvdaCommand());
   program.addCommand(killswitchCommand());
+  program.addCommand(voiceoverCommand());
 }
