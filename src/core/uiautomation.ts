@@ -118,6 +118,8 @@ function detectStrategy(windowClass: string, processName?: string): 'native' | '
 
   // Heuristics for common patterns
   if (windowClass.includes('Chrome_WidgetWin')) return 'electron';
+  if (windowClass.includes('Chrome Legacy Window')) return 'electron'; // CEF apps like Battle.net
+  if (windowClass.includes('CefBrowserWindow')) return 'electron'; // Generic CEF
   if (windowClass.includes('WebView')) return 'webview2';
   if (windowClass.includes('WinUI')) return 'webview2';
   if (windowClass.includes('ApplicationFrame')) return 'uwp';
@@ -200,6 +202,12 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
       elements = await findNativeElements(windowInfo.name);
     }
   } else if (strategy === 'webview2' || strategy === 'electron') {
+    // For Electron/CEF apps, ensure NVDA is running FIRST
+    // Chromium only exposes its accessibility tree when a screen reader is detected
+    if (strategy === 'electron') {
+      await ensureNvdaForElectron(true);
+    }
+
     // Search for Document elements globally
     elements = await findDocumentElements(windowInfo.name);
 
@@ -208,14 +216,8 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
       elements = await findNativeElements(windowInfo.name);
     }
 
-    // MSAA fallback for Electron apps when UIA finds too few elements
-    // Electron apps often don't expose their accessibility tree via UIA
-    // NVDA must be running to trigger Chromium's accessibility tree
-    if (elements.length < 10) {
-      // Ensure NVDA is running for Electron accessibility
-      // forceInstall=true to auto-download NVDA when needed (40MB one-time)
-      await ensureNvdaForElectron(true);
-
+    // MSAA fallback for Electron apps when UIA still finds too few elements
+    if (strategy === 'electron' && elements.length < 10) {
       const msaaElements = await findMsaaElements(windowInfo.name);
       if (msaaElements.length > elements.length) {
         elements = msaaElements;

@@ -1166,9 +1166,21 @@ ${tree.ui.slice(0, 10).map((el) => {
 });
 
 export async function startServer(): Promise<void> {
-  // Note: VoiceOver auto-start removed - now using AXManualAccessibility for Electron apps
-  // AXManualAccessibility works WITHOUT VoiceOver, avoiding unwanted audio
-  // VoiceOver can still be started manually via os_voiceover_start if needed
+  // Auto-start NVDA on Windows for Electron/CEF app accessibility
+  // NVDA runs silently in background and enables accessibility tree for all Chromium-based apps
+  if (process.platform === 'win32') {
+    try {
+      const nvdaRunning = await isNvdaRunning();
+      if (!nvdaRunning) {
+        console.error('[OScribe] Starting NVDA for Electron/CEF accessibility...');
+        await startNvda();
+        console.error('[OScribe] NVDA started in silent mode');
+      }
+    } catch (err) {
+      // Non-blocking: NVDA is optional, will be started on-demand if needed
+      console.error('[OScribe] NVDA auto-start skipped:', err);
+    }
+  }
 
   // Test log file writing
   const testLogFile = join(homedir(), 'Desktop', 'oscribe-mcp-server-test.log');

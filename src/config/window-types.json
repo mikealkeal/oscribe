@@ -109,6 +109,10 @@
     "spotify": {
       "strategy": "electron"
     },
+    "battle.net": {
+      "strategy": "electron",
+      "note": "Blizzard Battle.net launcher (CEF-based)"
+    },
     "chrome": {
       "strategy": "browser",
       "browserType": "chrome",
