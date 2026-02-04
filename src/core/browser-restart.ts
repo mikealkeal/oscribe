@@ -279,7 +279,7 @@ async function closeBrowser(browserType: BrowserType): Promise<boolean> {
     }
 
     throw new Error(`Unsupported platform: ${process.platform}`);
-  } catch (error) {
+  } catch {
     console.error('[browser-restart]', event);
     return false;
   }
@@ -387,7 +387,7 @@ async function launchBrowserWithCDP(browserType: BrowserType, port = 9222): Prom
     event.success = true;
     console.log('[browser-restart]', event);
     return true;
-  } catch (error) {
+  } catch {
     console.error('[browser-restart]', event);
     return false;
   }

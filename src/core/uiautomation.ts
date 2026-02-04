@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 import { readFileSync, existsSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpdir } from 'node:os';
+// tmpdir import removed - not used
 import { ensureNvdaForElectron } from './nvda.js';
 // Dynamic import to bust ESM cache (detectBrowser)
 // import { detectBrowser } from './browser.js';
@@ -134,7 +134,7 @@ export async function getUIElements(windowTitle?: string): Promise<UITree> {
   const logFile = '/tmp/oscribe-uielem.log';
   try {
     appendFileSync(logFile, `[${new Date().toISOString()}] getUIElements called: platform=${process.platform}, windowTitle=${windowTitle}\n`);
-  } catch (e) {
+  } catch {
     // Ignore log errors
   }
 
@@ -142,7 +142,9 @@ export async function getUIElements(windowTitle?: string): Promise<UITree> {
   if (process.platform === 'darwin') {
     try {
       appendFileSync(logFile, `[${new Date().toISOString()}] Calling getUIElementsMacOS\n`);
-    } catch {}
+    } catch {
+      // Ignore log errors
+    }
     return getUIElementsMacOS(windowTitle);
   } else if (process.platform === 'win32') {
     return getUIElementsWindows(windowTitle);
@@ -573,14 +575,16 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
   const { getActiveWindow } = await import('./windows.js');
   const activeWindow = await getActiveWindow();
 
-  let targetWindow = windowTitle || (activeWindow?.title ?? '');
+  const targetWindow = windowTitle || (activeWindow?.title ?? '');
   const appName = activeWindow?.app ?? '';
 
   // Debug log to file
   const logFile = '/tmp/oscribe-uielem.log';
   try {
     appendFileSync(logFile, `[${new Date().toISOString()}] macOS activeWindow: ${JSON.stringify({ title: activeWindow?.title, app: activeWindow?.app, appName })}\n`);
-  } catch {}
+  } catch {
+    // Ignore log errors
+  }
 
   if (!targetWindow) {
     // No window focused - return empty for now
@@ -600,17 +604,23 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
   const detectBrowser = await getDetectBrowser();
   try {
     appendFileSync(logFile, `[${new Date().toISOString()}] Calling detectBrowser with appName: ${appName}\n`);
-  } catch {}
+  } catch {
+    // Ignore log errors
+  }
   const browserInfo = await detectBrowser('', appName);
   try {
     appendFileSync(logFile, `[${new Date().toISOString()}] Browser detected: ${JSON.stringify(browserInfo)}\n`);
-  } catch {}
+  } catch {
+    // Ignore log errors
+  }
 
   try {
     appendFileSync(logFile, `[${new Date().toISOString()}] Checking CDP condition: browserInfo=${!!browserInfo}, isDebuggingEnabled=${browserInfo?.isDebuggingEnabled}\n`);
-  } catch {}
+  } catch {
+    // Ignore log errors
+  }
 
-  if (browserInfo && browserInfo.isDebuggingEnabled) {
+  if (browserInfo?.isDebuggingEnabled) {
     try {
       appendFileSync(logFile, `[${new Date().toISOString()}] ✓ ENTERING CDP BLOCK - Calling getBrowserElementsViaCDP...\n`);
       const { elements: browserElements, chromeUIOffset } = await getBrowserElementsViaCDP('', targetWindow);
@@ -786,7 +796,7 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
       content,
       timestamp: new Date().toISOString(),
     };
-  } catch (error) {
+  } catch {
     // Return empty on error
     return {
       window: targetWindow,

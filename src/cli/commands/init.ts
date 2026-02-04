@@ -64,7 +64,7 @@ export function initCommand(): Command {
             } else {
               nvdaSpinner.fail(chalk.yellow('NVDA installation failed - you can retry with: oscribe nvda install'));
             }
-          } catch (error) {
+          } catch {
             nvdaSpinner.fail(chalk.yellow('NVDA installation failed'));
             console.log(chalk.gray(`You can retry later with: oscribe nvda install`));
           }

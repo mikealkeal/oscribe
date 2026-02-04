@@ -18,7 +18,7 @@ import { click, typeText, hotkey, scroll, moveMouse, getMousePosition, clickAtCu
 import { listWindows, focusWindow } from '../core/windows.js';
 import { getUIElements, getElementAtPoint, findSystemUIElements, getTaskbarConfig } from '../core/uiautomation.js';
 import { isNvdaInstalled, isNvdaRunning, initNvda, startNvda, stopNvda, getNvdaStatus } from '../core/nvda.js';
-import { isVoiceOverAvailable, isVoiceOverRunning, startVoiceOver, stopVoiceOver, getVoiceOverStatus } from '../core/voiceover.js';
+import { isVoiceOverRunning, startVoiceOver, stopVoiceOver, getVoiceOverStatus } from '../core/voiceover.js';
 import { restartBrowserWithCDP } from '../core/browser-restart.js';
 import { RestrictedActionError } from '../core/security.js';
 import { UserInterruptError, resetKillSwitch, checkResumeSignal } from '../core/killswitch.js';
@@ -1041,12 +1041,12 @@ STEPS TO ENABLE CDP:
         const clientVersion = server.getClientVersion();
         const { ratio, clientType } = calculateImageRatio(width, height, clientVersion?.name);
 
-        // Format elements
-        const elementsText = tree.ui.map((el) => {
-          const cx = el.x + Math.floor(el.width / 2);
-          const cy = el.y + Math.floor(el.height / 2);
-          return `- ${el.type}: "${el.name}" pos=(${el.x},${el.y}) center=(${cx},${cy}) [${el.width}x${el.height}]`;
-        }).join('\n');
+        // Format elements (not used in output but kept for potential future use)
+        // const elementsText = tree.ui.map((el) => {
+        //   const cx = el.x + Math.floor(el.width / 2);
+        //   const cy = el.y + Math.floor(el.height / 2);
+        //   return `- ${el.type}: "${el.name}" pos=(${el.x},${el.y}) center=(${cx},${cy}) [${el.width}x${el.height}]`;
+        // }).join('\n');
 
         const strategyInfo = `🔧 Strategy: ${tree.strategy}${tree.strategy === 'browser' ? ' (CDP active ✓)' : ' (CDP not enabled ⚠️)'}`;
         const successMessage = `✅ Browser restarted successfully with CDP enabled!

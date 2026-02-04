@@ -60,7 +60,7 @@ export async function detectBrowser(
 
   // Platform-specific detection
   let browserType: BrowserType = 'unknown';
-  let processId: BrowserProcessId = '' as BrowserProcessId;
+  const processId: BrowserProcessId = '' as BrowserProcessId;
 
   if (platform === 'win32') {
     // Windows: detect by window class

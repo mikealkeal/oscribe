@@ -155,7 +155,7 @@ export async function connectCDP(
  * @returns Active tab target or null if no tab is active
  */
 export async function getActiveTab(
-  connection?: CDPConnection
+  _connection?: CDPConnection
 ): Promise<CDP.Target | null> {
   try {
     const targets = (await CDP.List()) as CDP.Target[];
