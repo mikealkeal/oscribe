@@ -2,6 +2,7 @@
 
 > Vision-based desktop automation MCP server. Control any application via screenshot + AI vision.
 
+[![npm version](https://img.shields.io/npm/v/oscribe.svg)](https://www.npmjs.com/package/oscribe)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
@@ -110,14 +111,11 @@ OScribe is your fallback when traditional automation tools fail:
 ## Quick Start
 
 ```bash
-# Install from source
-git clone https://github.com/mikealkeal/oscribe.git
-cd oscribe
-npm install
-npm run build
+# Install globally from npm
+npm install -g oscribe
 
-# Start MCP server (used by Claude Desktop, Claude Code, etc.)
-node dist/bin/oscribe.js serve
+# Or use directly with npx (no install needed)
+npx oscribe --help
 ```
 
 Then configure your MCP client (see [MCP Integration](#mcp-integration) below).
@@ -129,14 +127,24 @@ Then configure your MCP client (see [MCP Integration](#mcp-integration) below).
 - **Node.js 22+** (22.0.0 or higher)
 - **Claude Desktop, Claude Code, or any MCP client** (provides OAuth authentication)
 
-### From Source (Recommended)
+### From npm (Recommended)
+
+```bash
+# Global installation
+npm install -g oscribe
+
+# Verify installation
+oscribe --version
+```
+
+### From Source
 
 ```bash
 git clone https://github.com/mikealkeal/oscribe.git
 cd oscribe
 npm install
 npm run build
-npm link  # Optional: makes 'oscribe' command available globally
+npm link  # Makes 'oscribe' command available globally
 ```
 
 ### Platform Support
@@ -260,14 +268,25 @@ Add OScribe to `mcpServers`:
 {
   "mcpServers": {
     "oscribe": {
-      "command": "node",
-      "args": ["C:/path/to/oscribe/dist/bin/oscribe.js", "serve"]
+      "command": "npx",
+      "args": ["-y", "oscribe", "serve"]
     }
   }
 }
 ```
 
-> **Tip:** Replace `C:/path/to/oscribe` with your actual installation path.
+Or if installed globally (`npm install -g oscribe`):
+
+```json
+{
+  "mcpServers": {
+    "oscribe": {
+      "command": "oscribe",
+      "args": ["serve"]
+    }
+  }
+}
+```
 
 Then **restart Claude Desktop**. You'll see a 🔌 icon indicating MCP tools are available.
 
@@ -279,14 +298,14 @@ Add a `.mcp.json` file in your project root:
 {
   "mcpServers": {
     "oscribe": {
-      "command": "node",
-      "args": ["C:/path/to/oscribe/dist/bin/oscribe.js", "serve"]
+      "command": "npx",
+      "args": ["-y", "oscribe", "serve"]
     }
   }
 }
 ```
 
-#### If installed globally (npm link)
+Or if installed globally:
 
 ```json
 {
@@ -539,7 +558,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Roadmap
 
-- [ ] npm package distribution
+- [x] npm package distribution
 - [ ] Web interface for remote control
 - [ ] Recording and playback of automation sequences
 - [ ] Multi-provider vision support (GPT-4V, Gemini)

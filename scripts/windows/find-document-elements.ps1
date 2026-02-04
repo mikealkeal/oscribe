@@ -1,6 +1,7 @@
 # Find-DocumentElements.ps1
 # Find Document elements (for WebView2/Electron/WinUI apps)
-# Finds Documents with RootWebArea that overlap with window
+# Finds Documents that belong to the SAME PROCESS as the target window
+# This prevents getting elements from other apps (like Chrome) when NVDA is active
 # Usage: powershell -File find-document-elements.ps1 -WindowTitle "Title"
 #
 # Output: JSON array of UI elements
@@ -31,6 +32,9 @@ if (-not $window) {
     exit
 }
 
+# Get the ProcessId of the target window - CRITICAL for filtering
+$targetProcessId = $window.Current.ProcessId
+
 $winRect = $window.Current.BoundingRectangle
 $winL = $winRect.X
 $winT = $winRect.Y
@@ -45,11 +49,14 @@ $allDocs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $do
 
 $elements = @()
 
-# Find the Document with HIGHEST overlap ratio (best match for this window)
+# Find the Document with HIGHEST overlap ratio that belongs to the SAME PROCESS
 $bestDoc = $null
 $bestRatio = 0
 
 foreach ($doc in $allDocs) {
+    # CRITICAL: Skip documents from other processes (e.g., Chrome when Battle.net is focused)
+    if ($doc.Current.ProcessId -ne $targetProcessId) { continue }
+
     $r = $doc.Current.BoundingRectangle
     if ([System.Double]::IsInfinity($r.X) -or $r.Width -lt 100) { continue }
 

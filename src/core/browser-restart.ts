@@ -136,8 +136,8 @@ async function getOpenTabs(port = 9222): Promise<string[]> {
 
     // Extract URLs from page targets only
     const urls = targetInfos
-      .filter((target) => target.type === 'page' && target.url && !target.url.startsWith('chrome://'))
-      .map((target) => target.url);
+      .filter((target: { type: string; url?: string }) => target.type === 'page' && target.url && !target.url.startsWith('chrome://'))
+      .map((target: { url: string }) => target.url);
 
     await disconnectCDP(cdp);
 

@@ -1,6 +1,6 @@
 {
   "name": "oscribe",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Vision-based desktop automation engine",
   "type": "module",
   "bin": {
@@ -16,7 +16,7 @@
   },
   "scripts": {
     "build": "tsc && npm run copy-assets",
-    "copy-assets": "cp -r src/config/*.json dist/src/config/ 2>/dev/null || true",
+    "copy-assets": "node scripts/copy-config.js",
     "dev": "tsx watch bin/oscribe.ts",
     "start": "node dist/bin/oscribe.js",
     "lint": "eslint src bin --ext .ts",

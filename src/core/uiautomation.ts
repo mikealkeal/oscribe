@@ -17,6 +17,7 @@ import { ensureNvdaForElectron } from './nvda.js';
 // import { detectBrowser } from './browser.js';
 import { connectCDP, disconnectCDP, getActiveTab } from './cdp-client.js';
 import { getInteractiveElements } from './cdp-elements.js';
+import { restartBrowserWithCDP } from './browser-restart.js';
 
 // Cache-busting dynamic import for detectBrowser
 async function getDetectBrowser() {
@@ -187,7 +188,7 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
     };
   }
 
-  const strategy = detectStrategy(windowInfo.className);
+  const strategy = detectStrategy(windowInfo.className, windowInfo.processName);
 
   // Step 3: Apply the right strategy
   let elements: UIElement[] = [];
@@ -253,9 +254,9 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
 }
 
 /**
- * Get basic window info (name, class)
+ * Get basic window info (name, class, process name)
  */
-async function getWindowInfo(windowTitle?: string): Promise<{ name: string; className: string }> {
+async function getWindowInfo(windowTitle?: string): Promise<{ name: string; className: string; processName: string }> {
   const scriptPath = join(__dirname, '..', '..', '..', 'scripts', 'windows', 'get-window-info.ps1');
   const windowFilter = windowTitle ? `"${windowTitle}"` : '""';
 
@@ -267,7 +268,7 @@ async function getWindowInfo(windowTitle?: string): Promise<{ name: string; clas
 
     return JSON.parse(stdout.trim());
   } catch {
-    return { name: '', className: '' };
+    return { name: '', className: '', processName: '' };
   }
 }
 
@@ -444,13 +445,28 @@ async function getBrowserElementsViaCDP(windowClass: string, windowTitle: string
     const appName = activeWindow?.app ?? '';
 
     const detectBrowser = await getDetectBrowser();
-    const browserInfo = await detectBrowser(windowClass, appName);
+    let browserInfo = await detectBrowser(windowClass, appName);
     if (!browserInfo) {
       throw new Error('Browser not detected');
     }
 
     if (!browserInfo.isDebuggingEnabled) {
-      throw new Error('Remote debugging not enabled on browser');
+      // Auto-restart browser with CDP enabled - OScribe magic!
+      console.log('[uiautomation] CDP not enabled, auto-restarting browser...');
+
+      const restartResult = await restartBrowserWithCDP(9222, appName);
+
+      if (!restartResult.success || !restartResult.cdpEnabled) {
+        throw new Error(`Failed to restart browser with CDP: ${restartResult.error || 'unknown error'}`);
+      }
+
+      console.log(`[uiautomation] Browser restarted with CDP (${restartResult.tabsRestored}/${restartResult.tabsSaved} tabs restored)`);
+
+      // Re-detect browser after restart
+      browserInfo = await detectBrowser(windowClass, appName);
+      if (!browserInfo?.isDebuggingEnabled) {
+        throw new Error('CDP still not enabled after browser restart');
+      }
     }
 
     // 2. Connect to CDP
@@ -620,6 +636,32 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
     appendFileSync(logFile, `[${new Date().toISOString()}] Checking CDP condition: browserInfo=${!!browserInfo}, isDebuggingEnabled=${browserInfo?.isDebuggingEnabled}\n`);
   } catch {
     // Ignore log errors
+  }
+
+  // Auto-restart browser if CDP not enabled (OScribe magic!)
+  if (browserInfo && !browserInfo.isDebuggingEnabled) {
+    try {
+      appendFileSync(logFile, `[${new Date().toISOString()}] CDP not enabled, auto-restarting browser...\n`);
+      console.log('[uiautomation] CDP not enabled, auto-restarting browser...');
+
+      const restartResult = await restartBrowserWithCDP(9222, appName);
+
+      if (restartResult.success && restartResult.cdpEnabled) {
+        appendFileSync(logFile, `[${new Date().toISOString()}] Browser restarted successfully (${restartResult.tabsRestored}/${restartResult.tabsSaved} tabs)\n`);
+        console.log(`[uiautomation] Browser restarted with CDP (${restartResult.tabsRestored}/${restartResult.tabsSaved} tabs restored)`);
+
+        // Re-detect browser after restart
+        const newBrowserInfo = await detectBrowser('', appName);
+        if (newBrowserInfo?.isDebuggingEnabled) {
+          // Update browserInfo reference for the CDP block below
+          Object.assign(browserInfo, newBrowserInfo);
+        }
+      } else {
+        appendFileSync(logFile, `[${new Date().toISOString()}] Browser restart failed: ${restartResult.error}\n`);
+      }
+    } catch (err) {
+      appendFileSync(logFile, `[${new Date().toISOString()}] Browser restart error: ${err}\n`);
+    }
   }
 
   if (browserInfo?.isDebuggingEnabled) {

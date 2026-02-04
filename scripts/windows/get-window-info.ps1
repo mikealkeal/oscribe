@@ -35,11 +35,24 @@ if ($WindowFilter -ne "") {
 }
 
 if (-not $window -or $window -eq $root) {
-    Write-Output '{"name":"","className":""}'
+    Write-Output '{"name":"","className":"","processName":""}'
     exit
 }
+
+# Get process name from ProcessId
+$processName = ""
+try {
+    $procId = $window.Current.ProcessId
+    if ($procId -gt 0) {
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+        if ($proc) {
+            $processName = $proc.ProcessName.ToLower()
+        }
+    }
+} catch {}
 
 @{
     name = $window.Current.Name
     className = $window.Current.ClassName
+    processName = $processName
 } | ConvertTo-Json -Compress
