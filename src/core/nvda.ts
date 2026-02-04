@@ -402,19 +402,21 @@ let nvdaWarningShown = false;
  * Ensure NVDA is running (for Electron app accessibility)
  * Call this before accessing Electron app UI elements
  *
+ * @param forceInstall - bypass autoDownload config (for MCP screenshot when Electron detected)
+ *
  * Respects config:
  * - nvda.autoStart: if false, won't start NVDA automatically
- * - nvda.autoDownload: if false, won't download NVDA automatically
+ * - nvda.autoDownload: if false, won't download NVDA automatically (unless forceInstall=true)
  */
-export async function ensureNvdaForElectron(): Promise<boolean> {
+export async function ensureNvdaForElectron(forceInstall = false): Promise<boolean> {
   if (process.platform !== 'win32') {
     return false;
   }
 
   const config = loadConfig();
 
-  // Check if auto-start is disabled
-  if (!config.nvda.autoStart) {
+  // Check if auto-start is disabled (unless forceInstall)
+  if (!forceInstall && !config.nvda.autoStart) {
     return false;
   }
 
@@ -425,15 +427,16 @@ export async function ensureNvdaForElectron(): Promise<boolean> {
 
   // Check if installed
   if (!isNvdaInstalled()) {
+    // If forceInstall=true, bypass autoDownload check and install automatically
+    if (forceInstall || config.nvda.autoDownload) {
+      logger.info('Auto-installing NVDA for Electron app accessibility...');
+      return startNvda(true); // autoInit=true triggers download
+    }
+
     if (!nvdaWarningShown) {
       logger.warn('NVDA not installed - Electron apps may show limited UI elements.');
       logger.warn('Run "oscribe nvda install" to enable full accessibility.');
       nvdaWarningShown = true;
-    }
-
-    // Try to init if autoDownload is enabled
-    if (config.nvda.autoDownload) {
-      return startNvda(true);
     }
     return false;
   }

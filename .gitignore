@@ -40,8 +40,9 @@ tmp/
 temp/
 *.tmp
 
-# Screenshots
+# Screenshots (except img/ directory for README assets)
 *.png
+!img/*.png
 *.jpg
 *.jpeg
 *.gif

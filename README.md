@@ -7,11 +7,75 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Windows](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-0078D6)](https://github.com/mikealkeal/oscribe)
 
-<!-- Demo GIF placeholder - replace with actual demo -->
-<!-- ![OScribe Demo](assets/demo.gif) -->
+## Supported Platforms & Applications
+
+<div align="center">
+
+### Operating Systems
+
+<table>
+<tr>
+  <td align="center" width="150">
+    <img src="img/macos-logo.png" width="48" height="48" alt="macOS"/><br/>
+    <b>macOS</b>
+  </td>
+  <td align="center" width="150">
+    <img src="img/windows-logo.png" width="48" height="48" alt="Windows"/><br/>
+    <b>Windows</b>
+  </td>
+</tr>
+</table>
+
+### Native Applications
+
+<table>
+<tr>
+  <td align="center" width="150">
+    <img src="img/finder-icon.png" width="48" height="48" alt="Finder"/><br/>
+    <b>Finder</b><br/>
+    <sub>File management</sub>
+  </td>
+  <td align="center" width="150">
+    <img src="img/windows-folder-icon.png" width="48" height="48" alt="Windows Explorer"/><br/>
+    <b>Explorer</b><br/>
+    <sub>File operations</sub>
+  </td>
+  <td align="center" width="150">
+    <img src="img/macos-settings-icon.png" width="48" height="48" alt="Settings"/><br/>
+    <b>System Settings</b><br/>
+    <sub>macOS & Windows</sub>
+  </td>
+</tr>
+</table>
+
+### Web Browsers (CDP-enhanced)
+
+<table>
+<tr>
+  <td align="center" width="150">
+    <img src="img/chrome-logo.png" width="48" height="48" alt="Chrome"/><br/>
+    <b>Chrome</b><br/>
+    <sub>200-300+ elements</sub>
+  </td>
+  <td align="center" width="150">
+    <img src="img/brave-logo.png" width="48" height="48" alt="Brave"/><br/>
+    <b>Brave</b><br/>
+    <sub>Full CDP support</sub>
+  </td>
+  <td align="center" width="150">
+    <b>Edge, Arc, Opera</b><br/>
+    <sub>Chromium-based</sub>
+  </td>
+</tr>
+</table>
+
+**Note:** Chrome 136+ requires automatic profile sync (~20-30s) due to [CDP security changes](https://github.com/browser-use/browser-use/issues/1520).
+
+</div>
 
 ## Table of Contents
 
+- [Supported Platforms & Applications](#supported-platforms--applications)
 - [Why OScribe?](#why-oscribe)
 - [Features](#features)
 - [Quick Start](#quick-start)
@@ -94,8 +158,14 @@ npm link  # Optional: makes 'oscribe' command available globally
 
 - Native screencapture command
 - UI Automation via AXUIElement API (`ax-reader` binary)
-- Requires: **Accessibility permissions** (System Preferences → Security & Privacy → Privacy → Accessibility)
-- Add Terminal or your IDE to allowed apps
+- Requires: **Accessibility permissions** (System Settings → Privacy & Security → Accessibility)
+  - Add Terminal or your IDE to allowed apps
+  - **IMPORTANT for VSCode users**: You must also authorize VSCode in "App Management" (Login Items & Extensions)
+    1. Open System Settings → General → Login Items & Extensions
+    2. Find "Visual Studio Code"
+    3. Toggle ON the switch
+    4. Enter your password or use Touch ID to confirm
+    5. This is required for OScribe MCP to control your system from Claude Code
 - Native apps (Chrome, Safari, Finder) work well
 - Electron apps (VS Code, etc.) have limited element detection (same as Windows without NVDA)
 

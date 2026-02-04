@@ -25,6 +25,12 @@
       "description": "UWP/WinUI natif - UI Automation avec XAML",
       "method": "findAll",
       "scope": "window"
+    },
+    "browser": {
+      "description": "Chromium browsers with CDP - rich DOM access",
+      "method": "cdpAccessibilityTree",
+      "scope": "activeTab",
+      "fallback": ["native", "vision"]
     }
   },
 
@@ -102,6 +108,41 @@
     },
     "spotify": {
       "strategy": "electron"
+    },
+    "chrome": {
+      "strategy": "browser",
+      "browserType": "chrome",
+      "note": "Google Chrome with CDP support"
+    },
+    "google chrome": {
+      "strategy": "browser",
+      "browserType": "chrome",
+      "note": "Google Chrome on macOS"
+    },
+    "msedge": {
+      "strategy": "browser",
+      "browserType": "edge",
+      "note": "Microsoft Edge with CDP support"
+    },
+    "brave": {
+      "strategy": "browser",
+      "browserType": "brave",
+      "note": "Brave Browser with CDP support"
+    },
+    "arc": {
+      "strategy": "browser",
+      "browserType": "arc",
+      "note": "Arc Browser with CDP support"
+    },
+    "microsoft edge": {
+      "strategy": "browser",
+      "browserType": "edge",
+      "note": "Microsoft Edge on macOS"
+    },
+    "brave browser": {
+      "strategy": "browser",
+      "browserType": "brave",
+      "note": "Brave Browser on macOS"
     }
   },
 

@@ -4,10 +4,16 @@
  */
 
 import { loadConfig } from '../config/index.js';
+import { existsSync, unlinkSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 // Import getMousePosition from input.ts would create circular dependency
 // So we import robotjs directly here
 import robot from 'robotjs';
+
+// Resume signal file path
+const RESUME_FILE = join(homedir(), '.oscribe', 'killswitch-resume');
 
 /**
  * Custom error for user interrupt
@@ -38,6 +44,35 @@ let lastActionTime = 0;
 export function resetKillSwitch(): void {
   lastPosition = null;
   lastActionTime = 0;
+}
+
+/**
+ * Check for resume signal file from CLI
+ * If found, reset kill switch and delete the file
+ * Returns true if a resume signal was consumed
+ */
+export function checkResumeSignal(): boolean {
+  try {
+    if (existsSync(RESUME_FILE)) {
+      // Read and validate the signal (contains timestamp)
+      const content = readFileSync(RESUME_FILE, 'utf-8');
+      const timestamp = parseInt(content, 10);
+
+      // Signal is valid if it's recent (within last 60 seconds)
+      const isRecent = Date.now() - timestamp < 60000;
+
+      // Always delete the file after reading
+      unlinkSync(RESUME_FILE);
+
+      if (isRecent) {
+        resetKillSwitch();
+        return true;
+      }
+    }
+  } catch {
+    // Ignore errors (file might be deleted by another process)
+  }
+  return false;
 }
 
 /**

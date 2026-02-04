@@ -27,6 +27,7 @@ export default [
         fetch: 'readonly',
         URL: 'readonly',
         URLSearchParams: 'readonly',
+        AbortController: 'readonly',
       },
     },
     plugins: {

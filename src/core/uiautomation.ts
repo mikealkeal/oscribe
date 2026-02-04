@@ -8,11 +8,22 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpdir } from 'node:os';
+// tmpdir import removed - not used
 import { ensureNvdaForElectron } from './nvda.js';
+// Dynamic import to bust ESM cache (detectBrowser)
+// import { detectBrowser } from './browser.js';
+import { connectCDP, disconnectCDP, getActiveTab } from './cdp-client.js';
+import { getInteractiveElements } from './cdp-elements.js';
+
+// Cache-busting dynamic import for detectBrowser
+async function getDetectBrowser() {
+  const timestamp = Date.now();
+  const module = await import(`./browser.js?t=${timestamp}`);
+  return module.detectBrowser;
+}
 
 const execAsync = promisify(exec);
 
@@ -21,9 +32,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 let windowTypesConfig: WindowTypesConfig | null = null;
 
 interface WindowTypeEntry {
-  strategy: 'native' | 'webview2' | 'electron' | 'uwp';
+  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser';
   note?: string;
   examples?: string[];
+  browserType?: string;
 }
 
 interface WindowTypesConfig {
@@ -67,22 +79,32 @@ export interface UIElement {
 export interface UITree {
   window: string;
   windowClass: string;
-  strategy: 'native' | 'webview2' | 'electron' | 'uwp';
+  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser';
   elements: UIElement[];
   /** Interactive UI elements only (buttons, inputs, etc.) - send this to AI */
   ui: UIElement[];
   /** Text content elements - kept for reference but not sent to AI */
   content: UIElement[];
   timestamp: string;
+  /** Window bounds (x, y, width, height) on screen - only for browser strategy */
+  windowBounds?: { x: number; y: number; width: number; height: number };
 }
 
 /**
  * Detect which strategy to use based on window class name
  */
-function detectStrategy(windowClass: string): 'native' | 'webview2' | 'electron' | 'uwp' {
+function detectStrategy(windowClass: string, processName?: string): 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' {
   const config = loadWindowTypesConfig();
 
-  // Check exact match first
+  // Check process name first (more reliable for browsers)
+  if (processName) {
+    const procLower = processName.toLowerCase();
+    if (config.processNames[procLower]) {
+      return config.processNames[procLower].strategy;
+    }
+  }
+
+  // Check exact match
   if (config.windowClasses[windowClass]) {
     return config.windowClasses[windowClass].strategy;
   }
@@ -108,8 +130,21 @@ function detectStrategy(windowClass: string): 'native' | 'webview2' | 'electron'
  * When no window is focused (desktop active), returns taskbar elements
  */
 export async function getUIElements(windowTitle?: string): Promise<UITree> {
+  // Debug log to absolute path
+  const logFile = '/tmp/oscribe-uielem.log';
+  try {
+    appendFileSync(logFile, `[${new Date().toISOString()}] getUIElements called: platform=${process.platform}, windowTitle=${windowTitle}\n`);
+  } catch {
+    // Ignore log errors
+  }
+
   // Platform-specific implementation
   if (process.platform === 'darwin') {
+    try {
+      appendFileSync(logFile, `[${new Date().toISOString()}] Calling getUIElementsMacOS\n`);
+    } catch {
+      // Ignore log errors
+    }
     return getUIElementsMacOS(windowTitle);
   } else if (process.platform === 'win32') {
     return getUIElementsWindows(windowTitle);
@@ -155,7 +190,16 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
   // Step 3: Apply the right strategy
   let elements: UIElement[] = [];
 
-  if (strategy === 'webview2' || strategy === 'electron') {
+  if (strategy === 'browser') {
+    // Browser strategy: try CDP first, fallback to native
+    try {
+      const { elements: browserElements } = await getBrowserElementsViaCDP(windowInfo.className, windowInfo.name);
+      elements = browserElements;
+    } catch (error) {
+      console.warn('[uiautomation] CDP failed, falling back to native', { error: String(error) });
+      elements = await findNativeElements(windowInfo.name);
+    }
+  } else if (strategy === 'webview2' || strategy === 'electron') {
     // Search for Document elements globally
     elements = await findDocumentElements(windowInfo.name);
 
@@ -169,7 +213,8 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
     // NVDA must be running to trigger Chromium's accessibility tree
     if (elements.length < 10) {
       // Ensure NVDA is running for Electron accessibility
-      await ensureNvdaForElectron();
+      // forceInstall=true to auto-download NVDA when needed (40MB one-time)
+      await ensureNvdaForElectron(true);
 
       const msaaElements = await findMsaaElements(windowInfo.name);
       if (msaaElements.length > elements.length) {
@@ -209,92 +254,30 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
  * Get basic window info (name, class)
  */
 async function getWindowInfo(windowTitle?: string): Promise<{ name: string; className: string }> {
+  const scriptPath = join(__dirname, '..', '..', '..', 'scripts', 'windows', 'get-window-info.ps1');
   const windowFilter = windowTitle ? `"${windowTitle}"` : '""';
 
-  const psScript = `
-Add-Type -AssemblyName UIAutomationClient;
-$root = [System.Windows.Automation.AutomationElement]::RootElement;
-$windowFilter = ${windowFilter};
-if ($windowFilter -ne "") {
-    # Search for Window type elements in descendants (includes modal dialogs)
-    $windowCondition = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-        [System.Windows.Automation.ControlType]::Window
+  try {
+    const { stdout } = await execAsync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -WindowFilter ${windowFilter}`,
+      { timeout: 5000 }
     );
-    $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $windowCondition);
-    $window = $null;
-    foreach ($w in $windows) {
-        if ($w.Current.Name -like "*$windowFilter*") { $window = $w; break; }
-    }
-} else {
-    $window = [System.Windows.Automation.AutomationElement]::FocusedElement;
-    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker;
-    while ($window -and $window.Current.ControlType -ne [System.Windows.Automation.ControlType]::Window -and $window -ne $root) {
-        $window = $walker.GetParent($window);
-    }
-}
-if (-not $window -or $window -eq $root) { Write-Output '{"name":"","className":""}'; exit; }
-@{ name = $window.Current.Name; className = $window.Current.ClassName } | ConvertTo-Json -Compress
-`;
 
-  const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
-  const { stdout } = await execAsync(
-    `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
-    { timeout: 5000 }
-  );
-
-  return JSON.parse(stdout.trim());
+    return JSON.parse(stdout.trim());
+  } catch {
+    return { name: '', className: '' };
+  }
 }
 
 /**
  * Find elements using native UI Automation on window
  */
 async function findNativeElements(windowName: string): Promise<UIElement[]> {
-  const psScript = `
-Add-Type -AssemblyName UIAutomationClient;
-$root = [System.Windows.Automation.AutomationElement]::RootElement;
-# Search for Window type elements in descendants (includes modal dialogs like Save As)
-$windowCondition = New-Object System.Windows.Automation.PropertyCondition(
-    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-    [System.Windows.Automation.ControlType]::Window
-);
-$windows = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $windowCondition);
-$window = $null;
-foreach ($w in $windows) {
-    if ($w.Current.Name -like "*${windowName.replace(/"/g, '`"').replace(/[*?[\]]/g, '`$&')}*") { $window = $w; break; }
-}
-if (-not $window) { Write-Output '[]'; exit; }
-
-$elements = @();
-$condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::IsEnabledProperty, $true);
-$allElements = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition);
-
-foreach ($el in $allElements) {
-    try {
-        $rect = $el.Current.BoundingRectangle;
-        if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [System.Double]::IsInfinity($rect.X)) {
-            $name = $el.Current.Name;
-            if ($name -match '[a-zA-Z0-9\\p{L}]') {
-                $elements += @{
-                    type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", "";
-                    name = $name;
-                    description = $el.Current.HelpText;
-                    automationId = $el.Current.AutomationId;
-                    x = [int]$rect.X; y = [int]$rect.Y;
-                    width = [int]$rect.Width; height = [int]$rect.Height;
-                    isEnabled = $el.Current.IsEnabled
-                }
-            }
-        }
-    } catch {}
-}
-$elements | ConvertTo-Json -Depth 2 -Compress
-`;
+  const scriptPath = join(__dirname, '..', '..', '..', 'scripts', 'windows', 'find-native-elements.ps1');
 
   try {
-    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
     const { stdout } = await execAsync(
-      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -WindowName "${windowName.replace(/"/g, '\\"')}"`,
       { maxBuffer: 10 * 1024 * 1024, timeout: 10000 }
     );
 
@@ -313,99 +296,11 @@ $elements | ConvertTo-Json -Depth 2 -Compress
  * Simple approach: find Documents with RootWebArea that overlap with window
  */
 async function findDocumentElements(windowTitle: string): Promise<UIElement[]> {
-  // Escape special regex chars for PowerShell -match
-  const safeTitle = windowTitle.replace(/[.*+?^${}()|[\]\\]/g, '.');
+  const scriptPath = join(__dirname, '..', '..', '..', 'scripts', 'windows', 'find-document-elements.ps1');
 
-  const psScript = `
-Add-Type -AssemblyName UIAutomationClient
-$root = [System.Windows.Automation.AutomationElement]::RootElement
-
-# Find window by name
-$windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
-$window = $null
-foreach ($w in $windows) {
-    if ($w.Current.Name -match '${safeTitle.substring(0, 30)}') { $window = $w; break }
-}
-
-if (-not $window) { Write-Output '[]'; exit }
-
-$winRect = $window.Current.BoundingRectangle
-$winL = $winRect.X; $winT = $winRect.Y
-$winR = $winRect.X + $winRect.Width; $winB = $winRect.Y + $winRect.Height
-
-$docCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
-$allDocs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $docCond)
-
-$elements = @()
-
-# Find the Document with HIGHEST overlap ratio (best match for this window)
-$bestDoc = $null
-$bestRatio = 0
-foreach ($doc in $allDocs) {
-    $r = $doc.Current.BoundingRectangle
-    if ([System.Double]::IsInfinity($r.X) -or $r.Width -lt 100) { continue }
-    $oL = [Math]::Max($r.X, $winL); $oT = [Math]::Max($r.Y, $winT)
-    $oR = [Math]::Min($r.X + $r.Width, $winR); $oB = [Math]::Min($r.Y + $r.Height, $winB)
-    $oArea = [Math]::Max(0, $oR - $oL) * [Math]::Max(0, $oB - $oT)
-    $docArea = $r.Width * $r.Height
-    $ratio = if ($docArea -gt 0) { $oArea / $docArea } else { 0 }
-    if ($ratio -gt $bestRatio) { $bestRatio = $ratio; $bestDoc = $doc }
-}
-
-# Only use the best Document if it has >50% overlap
-$docs = @()
-if ($bestDoc -and $bestRatio -gt 0.5) { $docs = @($bestDoc) }
-if ($docs.Count -eq 0) { $docs = @($window) }
-
-foreach ($doc in $docs) {
-    $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker;
-
-    function Walk-Element {
-        param($el, $depth)
-        if ($depth -gt 25) { return }
-
-        try {
-            $rect = $el.Current.BoundingRectangle;
-            $name = $el.Current.Name;
-            $type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", "";
-            $help = $el.Current.HelpText;
-            $autoId = $el.Current.AutomationId;
-
-            # Include interactive elements
-            if ($name -or $autoId -or $type -eq "Button" -or $type -eq "TabItem" -or $type -eq "Slider" -or $type -eq "CheckBox" -or $type -eq "Edit" -or $type -eq "ComboBox" -or $type -eq "ListItem" -or $type -eq "MenuItem") {
-                if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [System.Double]::IsInfinity($rect.X)) {
-                    $script:elements += @{
-                        type = $type;
-                        name = if ($name) { $name } else { $help };
-                        description = $help;
-                        automationId = $autoId;
-                        x = [int]$rect.X; y = [int]$rect.Y;
-                        width = [int]$rect.Width; height = [int]$rect.Height;
-                        isEnabled = $el.Current.IsEnabled
-                    }
-                }
-            }
-
-            $child = $walker.GetFirstChild($el);
-            while ($child) {
-                Walk-Element $child ($depth + 1);
-                $child = $walker.GetNextSibling($child);
-            }
-        } catch {}
-    }
-
-    Walk-Element $doc 0;
-}
-
-if ($elements.Count -eq 0) { Write-Output '[]'; exit; }
-$elements | ConvertTo-Json -Depth 2 -Compress
-`;
-
-  const scriptPath = join(tmpdir(), `oscribe-ui-${Date.now()}.ps1`);
   try {
-    writeFileSync(scriptPath, psScript, 'utf8');
     const { stdout } = await execAsync(
-      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -WindowTitle "${windowTitle.replace(/"/g, '\\"')}"`,
       { maxBuffer: 10 * 1024 * 1024, timeout: 15000 }
     );
 
@@ -416,8 +311,6 @@ $elements | ConvertTo-Json -Depth 2 -Compress
     return Array.isArray(parsed) ? parsed : [parsed];
   } catch {
     return [];
-  } finally {
-    try { unlinkSync(scriptPath); } catch { /* ignore */ }
   }
 }
 
@@ -438,65 +331,11 @@ export async function getTaskbarConfig(): Promise<TaskbarConfig> {
     return { position: 'bottom', autoHide: false, visible: true };
   }
 
-  const psScript = `
-Add-Type -AssemblyName UIAutomationClient;
-$root = [System.Windows.Automation.AutomationElement]::RootElement;
-
-# Find taskbar
-$condition = New-Object System.Windows.Automation.PropertyCondition(
-    [System.Windows.Automation.AutomationElement]::ClassNameProperty, "Shell_TrayWnd"
-);
-$taskbar = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $condition);
-
-$result = @{ position = "bottom"; autoHide = $false; visible = $true }
-
-if ($taskbar) {
-    $rect = $taskbar.Current.BoundingRectangle;
-
-    # Check visibility (if Y > screen height, it's hidden)
-    Add-Type -AssemblyName System.Windows.Forms
-    $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-
-    # Determine position based on taskbar bounds
-    if ($rect.Width -gt $rect.Height) {
-        # Horizontal taskbar (top or bottom)
-        if ($rect.Y -lt $screen.Height / 2) {
-            $result.position = "top"
-        } else {
-            $result.position = "bottom"
-        }
-    } else {
-        # Vertical taskbar (left or right)
-        if ($rect.X -lt $screen.Width / 2) {
-            $result.position = "left"
-        } else {
-            $result.position = "right"
-        }
-    }
-
-    # Check if auto-hide is enabled (taskbar mostly off-screen)
-    if ($result.position -eq "bottom" -and $rect.Y -ge $screen.Height - 5) {
-        $result.autoHide = $true
-        $result.visible = $false
-    } elseif ($result.position -eq "top" -and $rect.Y -le -$rect.Height + 5) {
-        $result.autoHide = $true
-        $result.visible = $false
-    } elseif ($result.position -eq "left" -and $rect.X -le -$rect.Width + 5) {
-        $result.autoHide = $true
-        $result.visible = $false
-    } elseif ($result.position -eq "right" -and $rect.X -ge $screen.Width - 5) {
-        $result.autoHide = $true
-        $result.visible = $false
-    }
-}
-
-$result | ConvertTo-Json -Compress
-`;
+  const scriptPath = join(__dirname, '..', '..', '..', 'scripts', 'windows', 'get-taskbar-config.ps1');
 
   try {
-    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
     const { stdout } = await execAsync(
-      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
       { timeout: 5000 }
     );
 
@@ -511,77 +350,11 @@ $result | ConvertTo-Json -Compress
  * Captures all OS-level UI elements, not just application windows
  */
 export async function findSystemUIElements(): Promise<UIElement[]> {
-  const psScript = `
-Add-Type -AssemblyName UIAutomationClient;
-$root = [System.Windows.Automation.AutomationElement]::RootElement;
-$elements = @();
-$walker = [System.Windows.Automation.TreeWalker]::RawViewWalker;
-
-# System window classes to capture
-$systemClasses = @(
-    "Shell_TrayWnd",      # Taskbar
-    "Shell_SecondaryTrayWnd", # Secondary taskbar (multi-monitor)
-    "Progman",            # Desktop
-    "WorkerW",            # Desktop worker
-    "Windows.UI.Core.CoreWindow", # Start menu, Action center, etc.
-    "NotifyIconOverflowWindow", # System tray overflow
-    "TopLevelWindowForOverflowXamlIsland" # Windows 11 widgets
-)
-
-function Walk-Element {
-    param($el, $depth, $source)
-    if ($depth -gt 20) { return }
-
-    try {
-        $rect = $el.Current.BoundingRectangle;
-        $name = $el.Current.Name;
-        $type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", "";
-        $autoId = $el.Current.AutomationId;
-        $className = $el.Current.ClassName;
-
-        if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [System.Double]::IsInfinity($rect.X)) {
-            # Include interactive elements
-            if ($name -or $type -eq "Button" -or $type -eq "MenuItem" -or $type -eq "ListItem" -or $autoId) {
-                $script:elements += @{
-                    type = $type;
-                    name = if ($name) { $name } else { $autoId };
-                    description = $el.Current.HelpText;
-                    automationId = $autoId;
-                    source = $source;
-                    x = [int]$rect.X; y = [int]$rect.Y;
-                    width = [int]$rect.Width; height = [int]$rect.Height;
-                    isEnabled = $el.Current.IsEnabled
-                }
-            }
-        }
-
-        $child = $walker.GetFirstChild($el);
-        while ($child) {
-            Walk-Element $child ($depth + 1) $source;
-            $child = $walker.GetNextSibling($child);
-        }
-    } catch {}
-}
-
-# Find and walk all system windows
-foreach ($className in $systemClasses) {
-    $condition = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ClassNameProperty, $className
-    );
-    $systemWindows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $condition);
-    foreach ($sysWin in $systemWindows) {
-        Walk-Element $sysWin 0 $className;
-    }
-}
-
-if ($elements.Count -eq 0) { Write-Output '[]'; exit; }
-$elements | ConvertTo-Json -Depth 2 -Compress
-`;
+  const scriptPath = join(__dirname, '..', '..', '..', 'scripts', 'windows', 'find-system-ui-elements.ps1');
 
   try {
-    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
     const { stdout } = await execAsync(
-      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
       { maxBuffer: 10 * 1024 * 1024, timeout: 15000 }
     );
 
@@ -598,6 +371,120 @@ $elements | ConvertTo-Json -Depth 2 -Compress
 // Keep backward compatibility
 async function findTaskbarElements(): Promise<UIElement[]> {
   return findSystemUIElements();
+}
+
+/**
+ * Get browser elements via Chrome DevTools Protocol (CDP)
+ * Works for Chromium browsers: Chrome, Edge, Brave, Arc, Opera
+ */
+/**
+ * Get window bounds for the active browser window (macOS)
+ */
+async function getBrowserWindowBounds(appName: string): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  if (process.platform !== 'darwin') {
+    return null; // Only macOS supported for now
+  }
+
+  try {
+    const script = `
+      tell application "System Events"
+        set frontApp to first application process whose name is "${appName.replace(/"/g, '\\"')}"
+        tell frontApp
+          tell front window
+            set windowBounds to position
+            set windowSize to size
+            set x to item 1 of windowBounds as text
+            set y to item 2 of windowBounds as text
+            set w to item 1 of windowSize as text
+            set h to item 2 of windowSize as text
+            return x & "|" & y & "|" & w & "|" & h
+          end tell
+        end tell
+      end tell
+    `;
+
+    const { stdout } = await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+    const parts = stdout.trim().split('|').map(Number);
+
+    if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+      return {
+        x: parts[0]!,
+        y: parts[1]!,
+        width: parts[2]!,
+        height: parts[3]!,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function getBrowserElementsViaCDP(windowClass: string, windowTitle: string): Promise<{ elements: UIElement[]; chromeUIOffset: number }> {
+  const event = {
+    action: 'cdp_get_elements',
+    windowClass,
+    windowTitle,
+    timestamp: new Date().toISOString(),
+    duration_ms: 0,
+    success: false,
+    elementsFound: 0,
+  };
+
+  const start = Date.now();
+
+  try {
+    // 1. Detect browser (with cache-busting)
+    // On macOS, windowClass is generic (AXWindow), so we need to get the app name
+    const { getActiveWindow } = await import('./windows.js');
+    const activeWindow = await getActiveWindow();
+    const appName = activeWindow?.app ?? '';
+
+    const detectBrowser = await getDetectBrowser();
+    const browserInfo = await detectBrowser(windowClass, appName);
+    if (!browserInfo) {
+      throw new Error('Browser not detected');
+    }
+
+    if (!browserInfo.isDebuggingEnabled) {
+      throw new Error('Remote debugging not enabled on browser');
+    }
+
+    // 2. Connect to CDP
+    const cdp = await connectCDP({
+      port: browserInfo.debugPort || 9222,
+      host: 'localhost',
+    });
+
+    // 3. Get active tab
+    const tab = await getActiveTab(cdp);
+    if (!tab) {
+      await disconnectCDP(cdp);
+      throw new Error('No active tab found');
+    }
+
+    // 4. Get Chrome UI offset (exact toolbar height)
+    const { getChromeUIOffset } = await import('./cdp-elements.js');
+    const chromeUIOffset = await getChromeUIOffset(cdp);
+
+    // 5. Extract interactive elements
+    const elements = await getInteractiveElements(cdp);
+
+    // 6. Cleanup
+    await disconnectCDP(cdp);
+
+    event.duration_ms = Date.now() - start;
+    event.success = true;
+    event.elementsFound = elements.length;
+    console.log('[uiautomation]', event);
+
+    return { elements, chromeUIOffset };
+  } catch (error) {
+    event.duration_ms = Date.now() - start;
+    console.warn('[uiautomation]', event);
+    throw error;
+  }
 }
 
 /**
@@ -618,10 +505,10 @@ async function findTaskbarElements(): Promise<UIElement[]> {
  * - 70-110+ elements detected (vs 3 with UIA)
  * - Without NVDA: only 3-7 elements
  *
- * TODO macOS: Create ax-reader (Swift binary) using AXUIElement API
- * - macOS uses AXUIElement for accessibility, not MSAA
- * - Need to compile: swiftc ax-reader.swift -o ax-reader
- * - Output same JSON format as MsaaReader.exe
+ * macOS: Uses ax-reader (Swift binary) via AXUIElement API
+ * - Source: scripts/macos/ax-reader.swift
+ * - Compile: swiftc scripts/macos/ax-reader.swift -o bin/ax-reader
+ * - Output same JSON format as MsaaReader.exe on Windows
  * - Check if Electron exposes accessibility better on macOS
  */
 async function findMsaaElements(windowTitle: string): Promise<UIElement[]> {
@@ -680,15 +567,23 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
 
   // Check if ax-reader exists
   if (!existsSync(axReaderPath)) {
-    throw new Error('ax-reader binary not found. Run: swiftc bin/ax-reader.swift -o bin/ax-reader');
+    throw new Error('ax-reader binary not found. Run: swiftc scripts/macos/ax-reader.swift -o bin/ax-reader');
   }
 
   // Get active window if no title specified
-  let targetWindow = windowTitle;
-  if (!targetWindow) {
-    const { getActiveWindow } = await import('./windows.js');
-    const activeWindow = await getActiveWindow();
-    targetWindow = activeWindow?.title ?? '';
+  // Always get app name for Electron detection
+  const { getActiveWindow } = await import('./windows.js');
+  const activeWindow = await getActiveWindow();
+
+  const targetWindow = windowTitle || (activeWindow?.title ?? '');
+  const appName = activeWindow?.app ?? '';
+
+  // Debug log to file
+  const logFile = '/tmp/oscribe-uielem.log';
+  try {
+    appendFileSync(logFile, `[${new Date().toISOString()}] macOS activeWindow: ${JSON.stringify({ title: activeWindow?.title, app: activeWindow?.app, appName })}\n`);
+  } catch {
+    // Ignore log errors
   }
 
   if (!targetWindow) {
@@ -703,6 +598,78 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
       content: [],
       timestamp: new Date().toISOString(),
     };
+  }
+
+  // Check if this is a Chromium browser and CDP is available (with cache-busting)
+  const detectBrowser = await getDetectBrowser();
+  try {
+    appendFileSync(logFile, `[${new Date().toISOString()}] Calling detectBrowser with appName: ${appName}\n`);
+  } catch {
+    // Ignore log errors
+  }
+  const browserInfo = await detectBrowser('', appName);
+  try {
+    appendFileSync(logFile, `[${new Date().toISOString()}] Browser detected: ${JSON.stringify(browserInfo)}\n`);
+  } catch {
+    // Ignore log errors
+  }
+
+  try {
+    appendFileSync(logFile, `[${new Date().toISOString()}] Checking CDP condition: browserInfo=${!!browserInfo}, isDebuggingEnabled=${browserInfo?.isDebuggingEnabled}\n`);
+  } catch {
+    // Ignore log errors
+  }
+
+  if (browserInfo?.isDebuggingEnabled) {
+    try {
+      appendFileSync(logFile, `[${new Date().toISOString()}] ✓ ENTERING CDP BLOCK - Calling getBrowserElementsViaCDP...\n`);
+      const { elements: browserElements, chromeUIOffset } = await getBrowserElementsViaCDP('', targetWindow);
+      appendFileSync(logFile, `[${new Date().toISOString()}] CDP returned ${browserElements.length} elements, Chrome UI offset: ${chromeUIOffset}px\n`);
+
+      // Get window bounds for coordinate conversion
+      const windowBounds = await getBrowserWindowBounds(appName);
+      if (windowBounds) {
+        appendFileSync(logFile, `[${new Date().toISOString()}] Window bounds: ${JSON.stringify(windowBounds)}\n`);
+
+        // Convert CDP coordinates to screen coordinates
+        // CDP coordinates are relative to the viewport, so we add:
+        // - window X/Y position
+        // - Chrome UI height (for Y only)
+        const offsetX = windowBounds.x;
+        const offsetY = windowBounds.y + chromeUIOffset;
+
+        appendFileSync(logFile, `[${new Date().toISOString()}] Applying offset: x+${offsetX}, y+${offsetY} (window.y=${windowBounds.y} + chromeUI=${chromeUIOffset})\n`);
+
+        browserElements.forEach((el) => {
+          el.x += offsetX;
+          el.y += offsetY;
+        });
+      }
+
+      // Separate UI elements from content
+      const ui = browserElements.filter((el) => el.type !== 'Text' && el.type !== 'Image');
+      const content = browserElements.filter((el) => el.type === 'Text');
+
+      appendFileSync(logFile, `[${new Date().toISOString()}] Returning strategy=browser\n`);
+      const result: UITree = {
+        window: targetWindow,
+        windowClass: 'Browser',
+        strategy: 'browser',
+        elements: browserElements,
+        ui,
+        content,
+        timestamp: new Date().toISOString(),
+      };
+      if (windowBounds) {
+        result.windowBounds = windowBounds;
+      }
+      return result;
+    } catch (error) {
+      appendFileSync(logFile, `[${new Date().toISOString()}] CDP FAILED: ${error instanceof Error ? error.message : String(error)}\n`);
+      appendFileSync(logFile, `[${new Date().toISOString()}] Stack: ${error instanceof Error ? error.stack : 'N/A'}\n`);
+      console.warn('[uiautomation] CDP failed on macOS, falling back to native', { error: String(error) });
+      // Fall through to native UI Automation
+    }
   }
 
   try {
@@ -763,6 +730,59 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
       return element;
     });
 
+    // If few elements detected and this looks like an Electron app, try with VoiceOver
+    const isElectronApp = appName.toLowerCase().includes('electron') ||
+                          appName.toLowerCase().includes('code') ||
+                          appName.toLowerCase().includes('slack') ||
+                          appName.toLowerCase().includes('discord');
+
+    if (elements.length < 10 && isElectronApp) {
+      // Try AXManualAccessibility first (preferred - no audio, faster)
+      const { enableElectronAccessibility } = await import('./axmanual.js');
+
+      const axEnabled = await enableElectronAccessibility(appName);
+
+      if (axEnabled) {
+        // Wait a moment for Electron to apply the accessibility change
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Retry element detection
+        const { stdout: retryStdout } = await execAsync(`"${axReaderPath}" "${safeTitle}"`, {
+          timeout: 15000,
+          maxBuffer: 10 * 1024 * 1024,
+        });
+
+        const retryResult = JSON.parse(retryStdout.trim()) as typeof result;
+
+        if (retryResult.elements.length > elements.length) {
+          // AXManualAccessibility helped - use new results
+            const newElements: UIElement[] = retryResult.elements.map((el) => ({
+              type: el.type,
+              name: el.name || '',
+              x: el.x,
+              y: el.y,
+              width: el.width,
+              height: el.height,
+              isEnabled: el.isEnabled,
+              ...(el.description ? { description: el.description } : {}),
+            }));
+
+            const ui = newElements.filter((el) => el.type !== 'Text' && el.type !== 'Image');
+            const content = newElements.filter((el) => el.type === 'Text');
+
+          return {
+            window: result.window,
+            windowClass: 'AXWindow',
+            strategy: 'native',
+            elements: newElements,
+            ui,
+            content,
+            timestamp: new Date().toISOString(),
+          };
+        }
+      }
+    }
+
     // Separate UI elements from content
     const ui = elements.filter((el) => el.type !== 'Text' && el.type !== 'Image');
     const content = elements.filter((el) => el.type === 'Text');
@@ -776,7 +796,7 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
       content,
       timestamp: new Date().toISOString(),
     };
-  } catch (error) {
+  } catch {
     // Return empty on error
     return {
       window: targetWindow,
@@ -845,30 +865,11 @@ async function getElementAtPointMacOS(_x: number, _y: number): Promise<UIElement
  * Windows: Get element at cursor position
  */
 async function getElementAtPointWindows(x: number, y: number): Promise<UIElement | null> {
-
-  const psScript = `
-Add-Type -AssemblyName UIAutomationClient;
-Add-Type -AssemblyName PresentationCore;
-$point = New-Object System.Windows.Point(${x}, ${y});
-$el = [System.Windows.Automation.AutomationElement]::FromPoint($point);
-if ($el) {
-    $rect = $el.Current.BoundingRectangle;
-    @{
-        type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", "";
-        name = $el.Current.Name;
-        description = $el.Current.HelpText;
-        automationId = $el.Current.AutomationId;
-        x = [int]$rect.X; y = [int]$rect.Y;
-        width = [int]$rect.Width; height = [int]$rect.Height;
-        isEnabled = $el.Current.IsEnabled
-    } | ConvertTo-Json -Compress
-} else { Write-Output 'null' }
-`;
+  const scriptPath = join(__dirname, '..', '..', '..', 'scripts', 'windows', 'get-element-at-point.ps1');
 
   try {
-    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
     const { stdout } = await execAsync(
-      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -X ${x} -Y ${y}`,
       { timeout: 5000 }
     );
 
