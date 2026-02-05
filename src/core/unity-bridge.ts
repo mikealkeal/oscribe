@@ -254,7 +254,7 @@ export async function getUnityElements(config?: Partial<UnityBridgeConfig>): Pro
       }
     });
 
-    socket.once('error', (err: NodeJS.ErrnoException) => {
+    socket.once('error', (err: Error & { code?: string }) => {
       recordFailure();
       if (err.code === 'ECONNREFUSED') {
         reject(new UnityBridgeNotRunningError(cfg.port));
