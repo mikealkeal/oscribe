@@ -20,6 +20,7 @@ import { getUIElements, getElementAtPoint, findSystemUIElements, getTaskbarConfi
 import { isNvdaInstalled, isNvdaRunning, initNvda, startNvda, stopNvda, getNvdaStatus } from '../core/nvda.js';
 import { isVoiceOverRunning, startVoiceOver, stopVoiceOver, getVoiceOverStatus } from '../core/voiceover.js';
 import { restartBrowserWithCDP } from '../core/browser-restart.js';
+import { setupUnityBridge } from '../core/unity-setup.js';
 import { RestrictedActionError } from '../core/security.js';
 import { UserInterruptError, resetKillSwitch, checkResumeSignal } from '../core/killswitch.js';
 import { SessionRecorder, ScreenContext, UIElementContext } from '../core/session-recorder.js';
@@ -146,6 +147,19 @@ const DragSchema = z.object({
   toY: z.number().describe('Ending Y coordinate'),
   button: z.enum(['left', 'right', 'middle']).default('left').describe('Mouse button (default: left)'),
   duration: z.number().default(500).describe('Duration of drag in ms (default: 500)'),
+});
+
+const UnitySetupSchema = z.object({
+  gamePath: z.string().optional().describe(
+    'Absolute path to the Unity game folder. ' +
+    'Windows: folder with .exe. macOS: folder containing the .app bundle. ' +
+    'If omitted, attempts to detect from active window.',
+  ),
+  step: z.enum(['auto', 'detect', 'bepinex', 'build', 'deploy'])
+    .default('auto')
+    .describe('Step to execute. "auto" runs full pipeline. "detect" only analyzes the game.'),
+  force: z.boolean().default(false)
+    .describe('Force re-install even if already present.'),
 });
 
 // Session recorder - initialized on first action
@@ -425,6 +439,42 @@ After restart, the screenshot will show "Strategy: browser (CDP active ✓)" and
           required: ['fromX', 'fromY', 'toX', 'toY'],
         },
       },
+      {
+        name: 'os_unity_setup',
+        description: `Automatically set up the Unity Bridge for any Unity Mono game (Windows & macOS).
+
+This tool automates the full pipeline:
+1. **Detect**: Analyzes the game folder (runtime, DLLs, architecture)
+2. **BepInEx**: Downloads and installs BepInEx 5 mod loader
+3. **Build**: Compiles OScribeBridge.dll adapted to the game's DLLs
+4. **Deploy**: Copies the plugin to BepInEx/plugins/
+
+After setup, launch the game and the bridge exposes 80-100+ UI elements on port 9876.
+Use os_screenshot to see Unity UI elements (strategy: "unity").
+
+Requires: dotnet SDK installed (https://dot.net/download).
+Supports: Unity Mono games only (not IL2CPP).`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            gamePath: {
+              type: 'string',
+              description: 'Absolute path to the Unity game folder. Windows: folder with .exe. macOS: folder with .app bundle. If omitted, detects from active window.',
+            },
+            step: {
+              type: 'string',
+              enum: ['auto', 'detect', 'bepinex', 'build', 'deploy'],
+              description: 'Step to execute. "auto" runs full pipeline. "detect" only analyzes (read-only).',
+              default: 'auto',
+            },
+            force: {
+              type: 'boolean',
+              description: 'Force re-install even if already present.',
+              default: false,
+            },
+          },
+        },
+      },
     ],
   };
 });
@@ -613,7 +663,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const browserInfo = activeWindow ? await detectBrowser(tree.windowClass, activeWindow.app) : null;
 
         // Build image info section with dimensions and ratio
-        const strategyInfo = `🔧 Strategy: ${tree.strategy}${tree.strategy === 'browser' ? ' (CDP active ✓)' : tree.strategy === 'native' && browserInfo ? ' (CDP not enabled ⚠️)' : ''}`;
+        const strategyInfo = `🔧 Strategy: ${tree.strategy}${tree.strategy === 'browser' ? ' (CDP active ✓)' : tree.strategy === 'unity' && tree.unityBridgeActive ? ' (Unity Bridge active ✓)' : tree.strategy === 'unity' && !tree.unityBridgeActive ? ' (native fallback, Bridge not connected ⚠️)' : tree.strategy === 'native' && browserInfo ? ' (CDP not enabled ⚠️)' : ''}`;
         const imageInfo = `📐 Screenshot: ${width}x${height} | Client: ${clientType} | Ratio: ${ratio.toFixed(3)}${taskbarInfo}`;
         const ratioHint = ratio > 1
           ? `⚠️ Image resized by client. For visual estimates, multiply coordinates by ${ratio.toFixed(3)}`
@@ -658,7 +708,11 @@ STEPS TO ENABLE CDP:
 
 💡 TIP: You should suggest this to the user immediately so they can enable CDP for better automation.`;
         }
-        // 2. Check for Electron app with limited accessibility
+        // 2. Check for Unity game without Bridge (only warn if bridge is NOT active)
+        else if (tree.strategy === 'unity' && !tree.unityBridgeActive && tree.ui.length < 10) {
+          accessibilityWarning = `🎮 UNITY GAME DETECTED: "${tree.window}"\n⚠️ Strategy: native (Unity Bridge not running)\n\n💡 Unity Bridge provides 10x more elements.\n   Install: Copy OScribeBridge.dll to BepInEx/plugins/`;
+        }
+        // 3. Check for Electron app with limited accessibility
         // Only warn if NVDA/VoiceOver is not running
         else if (process.platform === 'win32' &&
             (tree.strategy === 'electron' || tree.windowClass.includes('Chrome_WidgetWin')) &&
@@ -673,7 +727,9 @@ STEPS TO ENABLE CDP:
         }
 
         // Return: 1) Accessibility warning FIRST if needed, 2) Window name, 3) Image info, 4) Instructions, 5) Elements, 6) Image
-        const capturedWindow = `📸 Captured window: "${tree.window}"`;
+        const capturedWindow = tree.strategy === 'unity'
+          ? `🎮 UNITY GAME: "${tree.window}"`
+          : `📸 Captured window: "${tree.window}"`;
         const focusReminder = `→ If this is not the intended window, use os_focus("App Name") first, then take another screenshot.`;
         const instruction = `⚠️ IMPORTANT: To click on elements, use center=(x,y) coordinates from the Elements list below with os_click_at(x, y). Do NOT estimate positions from the image.`;
 
@@ -1136,6 +1192,42 @@ ${tree.ui.slice(0, 10).map((el) => {
               text: `Dragged from (${fromX}, ${fromY}) to (${toX}, ${toY})`,
             },
           ],
+        };
+      }
+
+      case 'os_unity_setup': {
+        const { gamePath, step, force } = UnitySetupSchema.parse(args);
+
+        const opts: Parameters<typeof setupUnityBridge>[0] = { step, force };
+        if (gamePath) opts.gamePath = gamePath;
+
+        const result = await setupUnityBridge(opts);
+
+        // Format output
+        const stepsText = result.steps.map((s) => {
+          const icon = s.status === 'success' ? '✅' : s.status === 'skipped' ? '⏭️' : s.status === 'pending' ? '⏳' : '❌';
+          const duration = s.duration_ms ? ` (${s.duration_ms}ms)` : '';
+          return `${icon} ${s.name}: ${s.message}${duration}`;
+        }).join('\n');
+
+        const header = result.success
+          ? `🎮 Unity Bridge setup ${step === 'detect' ? 'analysis' : 'complete'} for "${result.gameName}"`
+          : `❌ Unity Bridge setup failed for "${result.gameName}"`;
+
+        const meta = [
+          `Game: ${result.gamePath}`,
+          `Platform: ${result.platform} | Runtime: ${result.runtime}${result.compilationMode ? ` | Mode: ${result.compilationMode}` : ''}`,
+        ].join('\n');
+
+        const nextStepText = result.nextStep ? `\n👉 Next: ${result.nextStep}` : '';
+        const errorText = result.error && !result.success ? `\n⚠️ Error: ${result.error}` : '';
+
+        return {
+          content: [{
+            type: 'text',
+            text: `${header}\n\n${meta}\n\nSteps:\n${stepsText}${nextStepText}${errorText}`,
+          }],
+          isError: !result.success,
         };
       }
 

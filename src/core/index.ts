@@ -12,6 +12,9 @@ export * from './uiautomation.js';
 export * from './nvda.js';
 export * from './voiceover.js';
 export * from './axmanual.js';
+// Unity Bridge
+export * from './unity-bridge.js';
+export * from './unity-setup.js';
 // Browser CDP modules
 export * from './browser.js';
 export * from './cdp-client.js';

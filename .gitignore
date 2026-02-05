@@ -46,6 +46,7 @@ temp/
 *.jpg
 *.jpeg
 *.gif
+!demo/*.gif
 *.bmp
 
 # Skills directories (reinstall with npx skills add)
@@ -64,6 +65,10 @@ SESSION-*.md
 FEATURE*.md
 TEST-*.md
 TESTING.md
+
+# C# build artifacts (Unity Bridge plugin)
+plugins/**/obj/
+plugins/**/bin/
 
 # Windows temp files
 nul

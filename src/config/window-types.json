@@ -31,10 +31,25 @@
       "method": "cdpAccessibilityTree",
       "scope": "activeTab",
       "fallback": ["native", "vision"]
+    },
+    "unity": {
+      "description": "Unity games with OScribe Bridge - direct scene tree access",
+      "method": "unityBridge",
+      "scope": "gameProcess",
+      "fallback": ["native", "vision"]
     }
   },
 
   "windowClasses": {
+    "UnityWndClass": {
+      "strategy": "unity",
+      "note": "Standard Unity game window",
+      "examples": ["Hearthstone", "Among Us", "Hollow Knight"]
+    },
+    "UnityContainerWndClass": {
+      "strategy": "unity",
+      "note": "Unity container window (Editor/Player)"
+    },
     "WinUIDesktopWin32WindowClass": {
       "strategy": "webview2",
       "note": "WinUI3 apps (Photos, new Windows apps)",
