@@ -456,7 +456,7 @@ async function detectGamePathFromWindow(): Promise<string> {
   if (isWindows) {
     try {
       const { stdout } = await execAsync(
-        `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class W { [DllImport(\\\"user32.dll\\\")] public static extern IntPtr GetForegroundWindow(); [DllImport(\\\"user32.dll\\\")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid); }'; $h = [W]::GetForegroundWindow(); $pid = 0; [W]::GetWindowThreadProcessId($h, [ref]$pid) | Out-Null; (Get-Process -Id $pid).Path"`,
+        `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class W { [DllImport(\\"user32.dll\\")] public static extern IntPtr GetForegroundWindow(); [DllImport(\\"user32.dll\\")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid); }'; $h = [W]::GetForegroundWindow(); $pid = 0; [W]::GetWindowThreadProcessId($h, [ref]$pid) | Out-Null; (Get-Process -Id $pid).Path"`,
       );
       const exePath = stdout.trim();
       if (exePath) return dirname(exePath);
