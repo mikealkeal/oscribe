@@ -4,9 +4,9 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import path from 'node:path';
+import { createRequire } from 'node:module';
 
 interface CheckResult {
   name: string;
@@ -169,7 +169,8 @@ function checkXcode(): CheckResult {
  */
 function checkRobotjs(): CheckResult {
   try {
-    // Try to require robotjs
+    // Try to resolve robotjs using createRequire for ESM compatibility
+    const require = createRequire(import.meta.url);
     require.resolve('robotjs');
     return {
       name: 'robotjs',
