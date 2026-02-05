@@ -18,6 +18,7 @@ import { ensureNvdaForElectron } from './nvda.js';
 import { connectCDP, disconnectCDP, getActiveTab } from './cdp-client.js';
 import { getInteractiveElements } from './cdp-elements.js';
 import { restartBrowserWithCDP } from './browser-restart.js';
+import { detectUnityGame, isUnityBridgeAvailable, getUnityElements } from './unity-bridge.js';
 
 // Cache-busting dynamic import for detectBrowser
 async function getDetectBrowser() {
@@ -33,7 +34,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 let windowTypesConfig: WindowTypesConfig | null = null;
 
 interface WindowTypeEntry {
-  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser';
+  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity';
   note?: string;
   examples?: string[];
   browserType?: string;
@@ -80,7 +81,7 @@ export interface UIElement {
 export interface UITree {
   window: string;
   windowClass: string;
-  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser';
+  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity';
   elements: UIElement[];
   /** Interactive UI elements only (buttons, inputs, etc.) - send this to AI */
   ui: UIElement[];
@@ -89,13 +90,20 @@ export interface UITree {
   timestamp: string;
   /** Window bounds (x, y, width, height) on screen - only for browser strategy */
   windowBounds?: { x: number; y: number; width: number; height: number };
+  /** Whether Unity Bridge TCP connection was used (vs native fallback) */
+  unityBridgeActive?: boolean;
 }
 
 /**
  * Detect which strategy to use based on window class name
  */
-function detectStrategy(windowClass: string, processName?: string): 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' {
+function detectStrategy(windowClass: string, processName?: string): 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity' {
   const config = loadWindowTypesConfig();
+
+  // Check Unity first (highest priority after browser)
+  if (detectUnityGame(processName || '', windowClass)) {
+    return 'unity';
+  }
 
   // Check process name first (more reliable for browsers)
   if (processName) {
@@ -192,8 +200,24 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
 
   // Step 3: Apply the right strategy
   let elements: UIElement[] = [];
+  let unityBridgeActive = false;
 
-  if (strategy === 'browser') {
+  if (strategy === 'unity') {
+    // Unity strategy: try Unity Bridge first, fallback to native
+    try {
+      if (await isUnityBridgeAvailable()) {
+        const { elements: unityElements } = await getUnityElements();
+        elements = unityElements;
+        unityBridgeActive = true;
+      } else {
+        console.warn('[uiautomation] Unity Bridge not available, fallback native');
+        elements = await findNativeElements(windowInfo.name);
+      }
+    } catch (error) {
+      console.warn('[uiautomation] Unity Bridge failed, falling back to native', { error: String(error) });
+      elements = await findNativeElements(windowInfo.name);
+    }
+  } else if (strategy === 'browser') {
     // Browser strategy: try CDP first, fallback to native
     try {
       const { elements: browserElements } = await getBrowserElementsViaCDP(windowInfo.className, windowInfo.name);
@@ -242,7 +266,7 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
   const ui = elements.filter((el) => el.type !== 'Text' && el.type !== 'Image');
   const content = elements.filter((el) => el.type === 'Text');
 
-  return {
+  const result: UITree = {
     window: windowInfo.name,
     windowClass: windowInfo.className,
     strategy,
@@ -251,6 +275,8 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
     content,
     timestamp: new Date().toISOString(),
   };
+  if (unityBridgeActive) result.unityBridgeActive = true;
+  return result;
 }
 
 /**

@@ -78,6 +78,7 @@
 
 - [Supported Platforms & Applications](#supported-platforms--applications)
 - [Why OScribe?](#why-oscribe)
+- [Demo](#demo)
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [MCP Integration](#mcp-integration)
@@ -97,6 +98,16 @@ OScribe is your fallback when traditional automation tools fail:
 - **Games and canvas apps** without DOM
 - **Third-party software** you can't modify
 - **Ad-hoc automation** without infrastructure setup
+
+## Demo
+
+### Helltaker - Full Chapter 1 Automated
+
+<div align="center">
+  <img src="demo/helltaker-chapter1.gif" alt="OScribe automating Helltaker Chapter 1" width="800"/>
+</div>
+
+> Claude plays through the entire first chapter of Helltaker using OScribe MCP tools - navigating menus, solving puzzles, and progressing through dialogue, all via screenshot + vision.
 
 ## Features
 
