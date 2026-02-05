@@ -110,21 +110,95 @@ OScribe is your fallback when traditional automation tools fail:
 
 ## Quick Start
 
-```bash
-# Install globally from npm
-npm install -g oscribe
+### Guided Installation (Recommended)
 
-# Or use directly with npx (no install needed)
-npx oscribe --help
+Run our interactive installer that checks and installs all prerequisites for you:
+
+```bash
+# macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/mikealkeal/oscribe/main/scripts/install.mjs | node
+
+# Windows (PowerShell as Administrator)
+irm https://raw.githubusercontent.com/mikealkeal/oscribe/main/scripts/install.mjs -OutFile install.mjs; node install.mjs
+```
+
+The installer will:
+
+1. ✅ Check Node.js version (22+ required)
+2. ✅ Check/install Python
+3. ✅ Check/install build tools (VS Build Tools or Xcode CLI)
+4. ✅ Install OScribe
+
+### Manual Installation
+
+If you prefer manual installation or already have prerequisites:
+
+```bash
+npm install -g oscribe
 ```
 
 Then configure your MCP client (see [MCP Integration](#mcp-integration) below).
 
 ## Installation
 
-### Requirements
+### System Prerequisites
 
-- **Node.js 22+** (22.0.0 or higher)
+OScribe uses **robotjs** for native mouse/keyboard control, which requires compilation tools:
+
+#### Windows
+
+1. **Node.js 22+** - [Download](https://nodejs.org/)
+2. **Python 3.x** - [Download](https://www.python.org/downloads/) (check "Add to PATH" during install)
+3. **Visual Studio Build Tools** - Install with C++ workload:
+
+   ```powershell
+   # Option 1: Via npm (recommended)
+   npm install -g windows-build-tools
+
+   # Option 2: Manual install
+   # Download from https://visualstudio.microsoft.com/visual-cpp-build-tools/
+   # Select "Desktop development with C++" workload
+   ```
+
+#### macOS
+
+1. **Node.js 22+** - [Download](https://nodejs.org/) or `brew install node`
+2. **Xcode Command Line Tools**:
+
+   ```bash
+   xcode-select --install
+   ```
+
+3. **Python 3.x** - Usually pre-installed, verify with `python3 --version`
+
+#### Verify Prerequisites
+
+**Before installing**, run the diagnostic script to check all prerequisites:
+
+```bash
+# macOS/Linux - Run directly without installation
+curl -fsSL https://raw.githubusercontent.com/mikealkeal/oscribe/main/scripts/doctor.mjs | node
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/mikealkeal/oscribe/main/scripts/doctor.mjs -OutFile doctor.mjs; node doctor.mjs
+```
+
+The doctor script checks:
+
+- Node.js version (22+)
+- Python installation
+- Build tools (VS Build Tools on Windows, Xcode CLI on macOS)
+
+It provides step-by-step fix instructions for any missing prerequisites.
+
+After OScribe is installed, you can also run:
+
+```bash
+oscribe doctor
+```
+
+### Additional Requirements
+
 - **Claude Desktop, Claude Code, or any MCP client** (provides OAuth authentication)
 
 ### From npm (Recommended)
@@ -155,14 +229,13 @@ npm link  # Makes 'oscribe' command available globally
 | macOS    | ✅ Supported |
 | Linux    | 🚧 Not tested yet |
 
-#### Windows
+#### Windows Details
 
 - PowerShell (included)
 - UI Automation via PowerShell + .NET
 - NVDA support for Electron apps
-- No additional dependencies needed
 
-#### macOS
+#### macOS Details
 
 - Native screencapture command
 - UI Automation via AXUIElement API (`ax-reader` binary)
@@ -462,6 +535,63 @@ oscribe/
 - **MCP**: @modelcontextprotocol/sdk
 
 ## Troubleshooting
+
+### Installation Issues
+
+**`npm install` fails with node-gyp errors:**
+
+First, run the diagnostic script (no installation required):
+
+```bash
+# macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/mikealkeal/oscribe/main/scripts/doctor.mjs | node
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/mikealkeal/oscribe/main/scripts/doctor.mjs -OutFile doctor.mjs; node doctor.mjs
+```
+
+This is usually due to missing build tools. robotjs requires native compilation.
+
+```bash
+# Error examples:
+# - "gyp ERR! find Python"
+# - "gyp ERR! find VS"
+# - "node-pre-gyp ERR! build error"
+```
+
+**Windows fix:**
+
+```powershell
+# 1. Install Python (if missing)
+# Download from https://www.python.org/downloads/
+# IMPORTANT: Check "Add Python to PATH" during installation
+
+# 2. Install Visual Studio Build Tools
+npm install -g windows-build-tools
+
+# Or manually: download from https://visualstudio.microsoft.com/visual-cpp-build-tools/
+# Select "Desktop development with C++" workload
+
+# 3. Retry installation
+npm install -g oscribe
+```
+
+**macOS fix:**
+
+```bash
+# 1. Install Xcode Command Line Tools
+xcode-select --install
+
+# 2. Retry installation
+npm install -g oscribe
+```
+
+**Still failing?** Try clearing npm cache:
+
+```bash
+npm cache clean --force
+npm install -g oscribe
+```
 
 ### MCP Server Issues
 
