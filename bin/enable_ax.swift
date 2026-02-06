@@ -19,10 +19,12 @@ var targetApp: NSRunningApplication?
 if let pid = Int32(target) {
     targetApp = runningApps.first(where: { $0.processIdentifier == pid })
 } else {
-    // Search by name
+    // Search by name (localizedName, bundleIdentifier, or executable name)
+    let lowerTarget = target.lowercased()
     targetApp = runningApps.first(where: {
-        $0.localizedName == target ||
-        $0.bundleIdentifier == target
+        $0.localizedName?.lowercased() == lowerTarget ||
+        $0.bundleIdentifier?.lowercased() == lowerTarget ||
+        $0.executableURL?.lastPathComponent.lowercased() == lowerTarget
     })
 }
 
