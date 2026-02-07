@@ -919,11 +919,9 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
       return element;
     });
 
-    // If few elements detected and this looks like an Electron app, try with VoiceOver
-    const isElectronApp = appName.toLowerCase().includes('electron') ||
-                          appName.toLowerCase().includes('code') ||
-                          appName.toLowerCase().includes('slack') ||
-                          appName.toLowerCase().includes('discord');
+    // Detect app type using the cross-platform strategy from window-types.json
+    const detectedStrategy = detectStrategy('', appName.toLowerCase());
+    const isElectronApp = detectedStrategy === 'electron';
 
     if (elements.length < 10 && isElectronApp) {
       // Try AXManualAccessibility first (preferred - no audio, faster)
@@ -962,7 +960,7 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
           return {
             window: result.window,
             windowClass: 'AXWindow',
-            strategy: 'native',
+            strategy: detectedStrategy,
             elements: newElements,
             ui,
             content,
