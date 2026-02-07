@@ -1,14 +1,17 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 
 /**
  * Direct test of accessibility functions
  */
 
-import { getAccessibilityTree, findAccessibilityElement } from './dist/src/core/accessibility.js';
+import { getAccessibilityTree, findAccessibilityElement } from '../dist/src/core/accessibility.js';
 
 console.log('🧪 Testing Accessibility Tools\n');
 
-async function test1() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AccessibilityTree = any;
+
+async function test1(): Promise<AccessibilityTree> {
   console.log('=== Test 1: Extract tree ===');
   try {
     const tree = await getAccessibilityTree();
@@ -19,12 +22,12 @@ async function test1() {
     console.log(`- Children: ${tree.children.length}`);
     return tree;
   } catch (error) {
-    console.error('❌ Failed:', error.message);
+    console.error('❌ Failed:', (error as Error).message);
     return null;
   }
 }
 
-async function test2(tree) {
+async function test2(tree: AccessibilityTree): Promise<void> {
   console.log('\n=== Test 2: Find element "7" ===');
   if (!tree) {
     console.log('⏭️  Skipped (no tree)');
@@ -47,11 +50,11 @@ async function test2(tree) {
       console.log('❌ Element not found');
     }
   } catch (error) {
-    console.error('❌ Failed:', error.message);
+    console.error('❌ Failed:', (error as Error).message);
   }
 }
 
-async function test3(tree) {
+async function test3(tree: AccessibilityTree): Promise<void> {
   console.log('\n=== Test 3: Find nonexistent element ===');
   if (!tree) {
     console.log('⏭️  Skipped (no tree)');
@@ -66,11 +69,11 @@ async function test3(tree) {
       console.log('✅ Correctly returned null for nonexistent element');
     }
   } catch (error) {
-    console.error('❌ Failed:', error.message);
+    console.error('❌ Failed:', (error as Error).message);
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   console.log('📱 Make sure Calculator is open and focused!\n');
   await new Promise(resolve => setTimeout(resolve, 1000));
 

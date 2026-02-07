@@ -1,13 +1,13 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Test SessionRecorder
  */
 
-import { SessionRecorder } from './dist/src/core/session-recorder.js';
+import { SessionRecorder } from '../dist/src/core/session-recorder.js';
 
 console.log('🧪 Testing SessionRecorder...\n');
 
-async function testSessionRecorder() {
+async function testSessionRecorder(): Promise<void> {
   // Create session
   const recorder = new SessionRecorder('Test: Ouvrir Brave et aller sur Google');
   console.log(`✅ Session créée: ${recorder.getSessionDir()}\n`);
@@ -58,7 +58,7 @@ async function testSessionRecorder() {
       }
     );
   } catch (error) {
-    console.log(`   → Erreur capturée: ${error.message}`);
+    console.log(`   → Erreur capturée: ${(error as Error).message}`);
   }
 
   // Save fake screenshot

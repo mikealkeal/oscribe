@@ -1,8 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 
-import { getAccessibilityTree, findAccessibilityElement } from './dist/src/core/accessibility.js';
+import { getAccessibilityTree, findAccessibilityElement } from '../dist/src/core/accessibility.js';
+import { writeFile } from 'fs/promises';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
-async function main() {
+async function main(): Promise<void> {
   try {
     console.log('Extracting accessibility tree...');
     const tree = await getAccessibilityTree();
@@ -22,14 +25,14 @@ async function main() {
       console.log(`  Value: ${button.value || 'N/A'}`);
     }
 
-    // Save full tree to file
-    console.log('\nSaving full tree to /tmp/accessibility_tree.json');
-    const fs = await import('fs/promises');
-    await fs.writeFile('/tmp/accessibility_tree.json', JSON.stringify(tree, null, 2));
+    // Save full tree to file (cross-platform)
+    const outPath = join(tmpdir(), 'accessibility_tree.json');
+    console.log(`\nSaving full tree to ${outPath}`);
+    await writeFile(outPath, JSON.stringify(tree, null, 2));
     console.log('✅ Saved!');
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('❌ Error:', (error as Error).message);
     process.exit(1);
   }
 }

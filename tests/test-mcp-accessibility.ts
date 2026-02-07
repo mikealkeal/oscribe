@@ -1,26 +1,25 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 
 /**
  * Test script for MCP accessibility tools
  * Tests os_accessibility_tree and os_find_element
  */
 
-import { spawn } from 'child_process';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Start MCP server
-const serverPath = join(__dirname, 'dist/src/mcp/server.js');
+const serverPath = join(__dirname, '../dist/src/mcp/server.js');
 const server = spawn('node', [serverPath], {
   stdio: ['pipe', 'pipe', 'inherit'],
 });
 
 let responseBuffer = '';
 
-server.stdout.on('data', (data) => {
+server.stdout!.on('data', (data: Buffer) => {
   responseBuffer += data.toString();
 
   // Try to parse complete JSON-RPC responses
@@ -32,7 +31,7 @@ server.stdout.on('data', (data) => {
       try {
         const response = JSON.parse(line);
         console.log('📥 Response:', JSON.stringify(response, null, 2));
-      } catch (e) {
+      } catch {
         // Not JSON, might be header
       }
     }
@@ -40,7 +39,7 @@ server.stdout.on('data', (data) => {
 });
 
 // Send JSON-RPC request
-function sendRequest(id, method, params = {}) {
+function sendRequest(id: number, method: string, params: Record<string, unknown> = {}): void {
   const request = {
     jsonrpc: '2.0',
     id,
@@ -48,7 +47,7 @@ function sendRequest(id, method, params = {}) {
     params,
   };
   console.log('📤 Request:', JSON.stringify(request, null, 2));
-  server.stdin.write(JSON.stringify(request) + '\n');
+  server.stdin!.write(JSON.stringify(request) + '\n');
 }
 
 // Test sequence

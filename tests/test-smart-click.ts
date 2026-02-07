@@ -7,20 +7,20 @@
  * 3. Vérifier le retry si échec
  *
  * Usage:
- *   node tests/test-smart-click.js
+ *   npx tsx tests/test-smart-click.ts
  */
 
 import { smartClick } from '../dist/src/core/automation.js';
 import { focusWindow, listWindows } from '../dist/src/core/windows.js';
 
-async function main() {
+async function main(): Promise<void> {
   console.log('=== Test Smart Click avec Feedback Loop ===\n');
 
   try {
     // 1. Lister les fenêtres disponibles
     console.log('Fenêtres disponibles:');
     const windows = await listWindows();
-    windows.forEach((w, i) => {
+    windows.forEach((w: { title: string; app: string }, i: number) => {
       console.log(`  ${i + 1}. ${w.title} (${w.app})`);
     });
     console.log('');
@@ -32,7 +32,7 @@ async function main() {
     try {
       await focusWindow(targetApp);
       console.log(`✓ ${targetApp} en focus\n`);
-    } catch (err) {
+    } catch {
       console.log(`⚠ ${targetApp} non trouvé, test avec la fenêtre active\n`);
     }
 
