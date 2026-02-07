@@ -1,20 +1,21 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Test automation avec SessionRecorder - Focus sur Brave existant
  */
 
-import { SessionRecorder } from './dist/src/core/session-recorder.js';
-import { captureScreen } from './dist/src/core/screenshot.js';
-import { focusWindow } from './dist/src/core/windows.js';
+import { SessionRecorder } from '../dist/src/core/session-recorder.js';
+import { captureScreen } from '../dist/src/core/screenshot.js';
+import { focusWindow } from '../dist/src/core/windows.js';
+// @ts-expect-error robotjs has no type declarations
 import robot from 'robotjs';
 
 console.log('🎬 Test avec focus sur Brave existant...\n');
 
-async function wait(ms) {
+async function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function automateWithRecording() {
+async function automateWithRecording(): Promise<void> {
   const recorder = new SessionRecorder('Focus Brave existant et aller sur Google');
   console.log(`✅ Session: ${recorder.getSessionDir()}\n`);
 
@@ -96,7 +97,7 @@ async function automateWithRecording() {
     console.log('\n🔥 Cette fois c\'est BRAVE! Pas Firefox! 🔥\n');
 
   } catch (error) {
-    console.error('\n❌ Erreur:', error.message);
+    console.error('\n❌ Erreur:', (error as Error).message);
     recorder.endSession();
   }
 }

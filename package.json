@@ -16,13 +16,14 @@
   },
   "scripts": {
     "build": "tsc && npm run copy-assets",
-    "copy-assets": "node scripts/copy-config.js",
+    "copy-assets": "tsx scripts/copy-config.ts",
     "dev": "tsx watch bin/oscribe.ts",
     "start": "node dist/bin/oscribe.js",
     "lint": "eslint src bin --ext .ts",
     "lint:fix": "eslint src bin --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"bin/**/*.ts\"",
     "typecheck": "tsc --noEmit",
+    "validate": "npm run build && npm run lint && npm run typecheck && node dist/bin/oscribe.js --help",
     "clean": "rimraf dist",
     "prepublishOnly": "npm run build"
   },

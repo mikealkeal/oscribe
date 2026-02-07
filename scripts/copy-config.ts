@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Cross-platform script to copy config files to dist
  * Works on Windows, macOS, and Linux
@@ -20,7 +20,7 @@ mkdirSync(dst, { recursive: true });
 if (existsSync(src)) {
   cpSync(src, dst, {
     recursive: true,
-    filter: (source) => {
+    filter: (source: string) => {
       // Include directories and .json files
       return !source.includes('.') || source.endsWith('.json');
     }

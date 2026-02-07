@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Test SessionRecorder avec dossier custom
  */
 
-import { SessionRecorder } from './dist/src/core/session-recorder.js';
-import { saveConfig, loadConfig } from './dist/src/config/index.js';
+import { SessionRecorder } from '../dist/src/core/session-recorder.js';
+import { saveConfig, loadConfig } from '../dist/src/config/index.js';
 import { join } from 'node:path';
 import { rmSync, existsSync } from 'node:fs';
 
@@ -21,10 +21,9 @@ if (existsSync(customDir)) {
 // Configure custom session dir
 console.log(`📁 Configuration: sessionDir = ${customDir}`);
 const currentConfig = loadConfig();
-saveConfig({
-  ...currentConfig,
-  sessionDir: customDir,
-});
+const configWithCustomDir = { ...currentConfig };
+configWithCustomDir.sessionDir = customDir;
+saveConfig(configWithCustomDir);
 
 // Create test session
 console.log('📝 Création d\'une session de test...');
@@ -58,9 +57,8 @@ console.log('   "sessionDir": "ton/dossier/custom"');
 
 // Restore original config
 console.log('\n🔄 Restauration de la config originale...');
-saveConfig({
-  ...currentConfig,
-  sessionDir: undefined,
-});
+const restoredConfig = { ...currentConfig };
+delete (restoredConfig as Record<string, unknown>).sessionDir;
+saveConfig(restoredConfig);
 
 console.log('✅ Test terminé!\n');

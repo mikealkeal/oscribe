@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Test script to verify MCP tools configuration
  * Checks that os_click, os_click_at, and os_locate are properly defined
@@ -9,15 +9,21 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const serverPath = join(__dirname, 'dist/src/mcp/server.js');
+const serverPath = join(__dirname, '../dist/src/mcp/server.js');
 
 console.log('📋 Verifying MCP tools configuration...\n');
+
+interface Check {
+  name: string;
+  pattern: RegExp;
+  description: string;
+}
 
 try {
   const serverCode = readFileSync(serverPath, 'utf-8');
 
   // Check for vision-based tools
-  const checks = [
+  const checks: Check[] = [
     {
       name: 'os_click with target parameter',
       pattern: /name:\s*['"]os_click['"]\s*,[\s\S]*?target:\s*{\s*type:\s*['"]string['"]/,
@@ -79,7 +85,7 @@ try {
     process.exit(1);
   }
 } catch (error) {
-  console.error('❌ Error reading MCP server:', error.message);
+  console.error('❌ Error reading MCP server:', (error as Error).message);
   console.error('\nMake sure to run: npm run build');
   process.exit(1);
 }
