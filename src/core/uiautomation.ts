@@ -12,7 +12,8 @@ import { readFileSync, existsSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // tmpdir import removed - not used
-import { ensureNvdaForElectron } from './nvda.js';
+import { ensureNvdaForElectron, stopNvda } from './nvda.js';
+import { loadConfig } from '../config/index.js';
 // Dynamic import to bust ESM cache (detectBrowser)
 // import { detectBrowser } from './browser.js';
 import { connectCDP, disconnectCDP, getActiveTab } from './cdp-client.js';
@@ -34,7 +35,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 let windowTypesConfig: WindowTypesConfig | null = null;
 
 interface WindowTypeEntry {
-  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity';
+  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity' | 'cef';
   note?: string;
   examples?: string[];
   browserType?: string;
@@ -81,7 +82,7 @@ export interface UIElement {
 export interface UITree {
   window: string;
   windowClass: string;
-  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity';
+  strategy: 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity' | 'cef';
   elements: UIElement[];
   /** Interactive UI elements only (buttons, inputs, etc.) - send this to AI */
   ui: UIElement[];
@@ -97,7 +98,7 @@ export interface UITree {
 /**
  * Detect which strategy to use based on window class name
  */
-function detectStrategy(windowClass: string, processName?: string): 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity' {
+function detectStrategy(windowClass: string, processName?: string): 'native' | 'webview2' | 'electron' | 'uwp' | 'browser' | 'unity' | 'cef' {
   const config = loadWindowTypesConfig();
 
   // Check Unity first (highest priority after browser)
@@ -217,6 +218,23 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
       console.warn('[uiautomation] Unity Bridge failed, falling back to native', { error: String(error) });
       elements = await findNativeElements(windowInfo.name);
     }
+  } else if (strategy === 'cef') {
+    // CEF strategy: scan for active CDP port, fallback to native
+    const { scanCEFPorts } = await import('./browser.js');
+    const cefPort = await scanCEFPorts();
+
+    if (cefPort) {
+      try {
+        const { elements: cefElements } = await getCEFElementsViaCDP(cefPort);
+        elements = cefElements;
+      } catch (error) {
+        console.warn('[uiautomation] CEF CDP failed, falling back to native', { error: String(error) });
+        elements = await findNativeElements(windowInfo.name);
+      }
+    } else {
+      // No CDP port found - native fallback (user needs to restart app with -cefdebug)
+      elements = await findNativeElements(windowInfo.name);
+    }
   } else if (strategy === 'browser') {
     // Browser strategy: try CDP first, fallback to native
     try {
@@ -248,9 +266,23 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
         elements = msaaElements;
       }
     }
+
+    // Auto-stop NVDA after scan to avoid keyboard interference
+    if (strategy === 'electron') {
+      const config = loadConfig();
+      if (config.nvda.autoStop) {
+        stopNvda().catch(() => { /* non-blocking */ });
+      }
+    }
   } else {
     // Native strategy
     elements = await findNativeElements(windowInfo.name);
+
+    // Supplement with Win32 toolbar elements (catches buttons UIA misses in wxWidgets/MFC apps)
+    const toolbarElements = await findWin32ToolbarElements(windowInfo.name);
+    if (toolbarElements.length > 0) {
+      elements = [...elements, ...toolbarElements];
+    }
 
     // Heuristic: if few elements found, try document search
     if (elements.length < 10) {
@@ -315,6 +347,46 @@ async function findNativeElements(windowName: string): Promise<UIElement[]> {
 
     const parsed = JSON.parse(result);
     return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Find Win32 toolbar buttons via cross-process memory reading.
+ * Detects ToolbarWindow32 controls and reads tooltip text + positions.
+ * Essential for wxWidgets/MFC/Win32 apps where UIA doesn't expose toolbar buttons.
+ */
+async function findWin32ToolbarElements(windowTitle: string): Promise<UIElement[]> {
+  if (process.platform !== 'win32') return [];
+
+  const readerPath = join(__dirname, '..', '..', '..', 'bin', 'Win32ToolbarReader.exe');
+  if (!existsSync(readerPath)) return [];
+
+  try {
+    const safeTitle = windowTitle.replace(/"/g, '\\"');
+    const { stdout } = await execAsync(`"${readerPath}" "${safeTitle}"`, {
+      timeout: 5000,
+      maxBuffer: 1024 * 1024,
+    });
+
+    const result = stdout.trim();
+    if (!result || result === '[]') return [];
+
+    const parsed = JSON.parse(result);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((el: { name?: string }) => el.name && el.name.length > 0)
+      .map((el: { type: string; name: string; x: number; y: number; width: number; height: number }) => ({
+        type: el.type || 'Button',
+        name: el.name,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        isEnabled: true,
+      }));
   } catch {
     return [];
   }
@@ -447,6 +519,53 @@ async function getBrowserWindowBounds(appName: string): Promise<{ x: number; y: 
     return null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Get elements from CEF (Chromium Embedded Framework) apps via CDP.
+ * Simpler than getBrowserElementsViaCDP: no browser detection, no auto-restart.
+ * Used for Unreal Engine apps (Epic Games Launcher, etc.) with -cefdebug=PORT.
+ */
+async function getCEFElementsViaCDP(port: number): Promise<{ elements: UIElement[] }> {
+  const start = Date.now();
+
+  try {
+    // CEF apps: list targets on the right port, find a 'page' target, then connect to it.
+    // We can't use getActiveTab() because it defaults to port 9222 internally.
+    const CDP = (await import('chrome-remote-interface')).default;
+    const targets = await CDP.List({ host: '127.0.0.1', port });
+
+    // CEF apps have multiple page targets (e.g. Epic: Social overlay + Store).
+    // Connect to ALL page targets and merge elements.
+    const pageTargets = targets.filter(
+      (t: { type: string; url?: string }) => t.type === 'page' && t.url && !t.url.startsWith('chrome://')
+    );
+
+    if (pageTargets.length === 0) {
+      throw new Error(`No CEF page target found on port ${port} (${targets.length} targets)`);
+    }
+
+    const allElements: UIElement[] = [];
+
+    for (const target of pageTargets) {
+      try {
+        console.log(`[uiautomation] CEF target: "${target.title}" (${target.url})`);
+        const cdp = await connectCDP({ port, host: '127.0.0.1', target: target.webSocketDebuggerUrl });
+        const elements = await getInteractiveElements(cdp);
+        await disconnectCDP(cdp);
+        console.log(`[uiautomation]   → ${elements.length} elements`);
+        allElements.push(...elements);
+      } catch (err) {
+        console.warn(`[uiautomation] CEF target "${target.title}" failed:`, String(err));
+      }
+    }
+
+    console.log(`[uiautomation] CEF CDP total: ${allElements.length} elements from ${pageTargets.length} targets in ${Date.now() - start}ms`);
+    return { elements: allElements };
+  } catch (error) {
+    console.warn(`[uiautomation] CEF CDP failed on port ${port}:`, String(error));
+    throw error;
   }
 }
 

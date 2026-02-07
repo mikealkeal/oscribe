@@ -3,13 +3,16 @@
  * Saves open tabs, closes browser, relaunches with remote debugging
  */
 
-import { execSync } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
 import { BrowserType, detectBrowser, isCDPEnabled } from './browser.js';
 import { connectCDP, disconnectCDP } from './cdp-client.js';
 import { getActiveWindow } from './windows.js';
+
+const execAsync = promisify(exec);
 
 const LOG_FILE = join(homedir(), 'Desktop', 'oscribe-browser-restart.log');
 
@@ -568,5 +571,138 @@ export async function restartBrowserWithCDP(port = 9222, windowApp?: string): Pr
     };
   } finally {
     log('<<< restartBrowserWithCDP finished');
+  }
+}
+
+/**
+ * Restart a CEF (Chromium Embedded Framework) app with CDP debugging enabled.
+ * Works for Unreal Engine apps like Epic Games Launcher.
+ * Uses -cefdebug=PORT flag (UE-specific, not --remote-debugging-port).
+ *
+ * Steps:
+ * 1. Detect the foreground CEF process (exe path + command line)
+ * 2. Kill the process
+ * 3. Relaunch with -cefdebug=PORT added
+ * 4. Wait for CDP to become available
+ *
+ * Windows only for now (PowerShell for process detection).
+ */
+export async function restartCEFWithCDP(port = 9225): Promise<BrowserRestartResult> {
+  log(`>>> restartCEFWithCDP called with port ${port}`);
+
+  if (process.platform !== 'win32') {
+    return {
+      success: false,
+      browser: 'unknown',
+      tabsSaved: 0,
+      tabsRestored: 0,
+      cdpEnabled: false,
+      error: 'CEF restart is currently Windows-only',
+    };
+  }
+
+  const start = Date.now();
+
+  try {
+    // 1. Get foreground window process info
+    log('Step 1: Detecting CEF process...');
+    const activeWindow = await getActiveWindow();
+    if (!activeWindow) {
+      throw new Error('No active window detected');
+    }
+
+    // Find the process by window title using PowerShell
+    const safeTitle = (activeWindow.title ?? '').replace(/'/g, "''");
+    const psCmd = [
+      `$w = Get-Process | Where-Object { $_.MainWindowTitle -like '*${safeTitle}*' } | Select-Object -First 1;`,
+      `if ($w) { $p = Get-CimInstance Win32_Process -Filter "ProcessId=$($w.Id)";`,
+      `@{pid=$w.Id;name=$w.ProcessName;exe=$p.ExecutablePath;cmd=$p.CommandLine} | ConvertTo-Json }`,
+      `else { Write-Error 'Process not found' }`,
+    ].join(' ');
+
+    const { stdout: procJson } = await execAsync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCmd}"`,
+      { timeout: 10000 }
+    );
+
+    const procInfo = JSON.parse(procJson.trim()) as { pid: number; name: string; exe: string; cmd: string };
+    log(`CEF process: PID=${procInfo.pid}, name=${procInfo.name}, exe=${procInfo.exe}`);
+
+    if (!procInfo.exe) {
+      throw new Error('Could not determine CEF process executable path');
+    }
+
+    // 2. Kill the process
+    log('Step 2: Killing CEF process...');
+    try {
+      execSync(`taskkill /F /PID ${procInfo.pid}`, { timeout: 5000 });
+    } catch {
+      // Also kill by name in case child processes remain
+      execSync(`taskkill /F /IM "${procInfo.name}.exe"`, { timeout: 5000 });
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    log('CEF process killed');
+
+    // 3. Relaunch with -cefdebug=PORT
+    log(`Step 3: Relaunching with -cefdebug=${port}...`);
+
+    // Strip any existing -cefdebug flag from original command line
+    let originalArgs = procInfo.cmd || '';
+    // Remove the exe path from the command line to get just args
+    if (originalArgs.startsWith('"')) {
+      const endQuote = originalArgs.indexOf('"', 1);
+      originalArgs = originalArgs.substring(endQuote + 1).trim();
+    } else {
+      const firstSpace = originalArgs.indexOf(' ');
+      originalArgs = firstSpace > 0 ? originalArgs.substring(firstSpace + 1).trim() : '';
+    }
+    // Remove existing -cefdebug flag if present
+    originalArgs = originalArgs.replace(/-cefdebug=\d+/g, '').trim();
+
+    const launchCmd = `start "" "${procInfo.exe}" ${originalArgs} -cefdebug=${port}`;
+    log(`Launch command: ${launchCmd}`);
+    // Use exec (non-blocking) — Epic Games takes a long time to start
+    exec(launchCmd, { shell: 'cmd.exe' });
+
+    // 4. Wait for CDP to become available
+    log('Step 4: Waiting for CDP...');
+    let cdpReady = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (await isCDPEnabled(port)) {
+        cdpReady = true;
+        log(`CDP active on port ${port} after ${(i + 1) * 2}s`);
+        break;
+      }
+      log(`  attempt ${i + 1}/20...`);
+    }
+
+    if (!cdpReady) {
+      log('WARNING: CDP not available after 40s');
+    }
+
+    const duration = Date.now() - start;
+    log(`restartCEFWithCDP completed in ${duration}ms, cdpReady=${cdpReady}`);
+
+    return {
+      success: true,
+      browser: 'unknown' as BrowserType,
+      tabsSaved: 0,
+      tabsRestored: 0,
+      cdpEnabled: cdpReady,
+    };
+  } catch (error) {
+    log(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      success: false,
+      browser: 'unknown',
+      tabsSaved: 0,
+      tabsRestored: 0,
+      cdpEnabled: false,
+      error: String(error),
+    };
+  } finally {
+    log('<<< restartCEFWithCDP finished');
   }
 }

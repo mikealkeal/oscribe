@@ -45,6 +45,7 @@ const KillSwitchSchema = z.object({
 const NvdaSchema = z.object({
   autoDownload: z.boolean().default(false),  // Don't download without consent
   autoStart: z.boolean().default(true),      // Start NVDA when Electron app detected
+  autoStop: z.boolean().default(true),       // Stop NVDA after UI scan (avoids keyboard interference)
   customPath: z.string().optional(),         // Custom NVDA installation path
 });
 
@@ -106,6 +107,7 @@ const DEFAULT_CONFIG: Config = {
   nvda: {
     autoDownload: false,
     autoStart: true,
+    autoStop: true,
   },
 };
 

@@ -383,8 +383,11 @@ export async function stopNvda(): Promise<boolean> {
   }
 
   try {
-    // Kill all NVDA processes
-    await execAsync('taskkill /F /IM nvda.exe', { timeout: 5000 });
+    // Kill all NVDA process variants (nvda.exe, nvda_noUIAccess.exe, nvdaHelperRemoteLoader.exe)
+    await execAsync(
+      'powershell -Command "Get-Process *nvda* -ErrorAction SilentlyContinue | Stop-Process -Force"',
+      { timeout: 10000 },
+    );
     nvdaProcess = null;
     logger.info('NVDA stopped');
     return true;

@@ -6,12 +6,24 @@
   "bin": {
     "oscribe": "./dist/bin/oscribe.js"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./core/screenshot": {
+      "types": "./dist/src/core/screenshot.d.ts",
+      "import": "./dist/src/core/screenshot.js"
+    },
+    "./core/windows": {
+      "types": "./dist/src/core/windows.d.ts",
+      "import": "./dist/src/core/windows.js"
+    },
+    "./core/uiautomation": {
+      "types": "./dist/src/core/uiautomation.d.ts",
+      "import": "./dist/src/core/uiautomation.js"
     }
   },
   "scripts": {

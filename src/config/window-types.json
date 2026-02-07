@@ -37,6 +37,12 @@
       "method": "unityBridge",
       "scope": "gameProcess",
       "fallback": ["native", "vision"]
+    },
+    "cef": {
+      "description": "CEF embedded apps - CDP via -cefdebug flag",
+      "method": "cdpAccessibilityTree",
+      "scope": "cefTargets",
+      "fallback": ["native", "vision"]
     }
   },
 
@@ -96,6 +102,11 @@
     "MozillaWindowClass": {
       "strategy": "native",
       "note": "Firefox - uses native accessibility"
+    },
+    "UnrealWindow": {
+      "strategy": "cef",
+      "note": "Unreal Engine apps with embedded CEF browser",
+      "examples": ["Epic Games Launcher", "Unreal Editor"]
     }
   },
 

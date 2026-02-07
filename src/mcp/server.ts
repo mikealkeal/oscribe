@@ -381,20 +381,22 @@ Example: To click on Button "Enregistrer" center=(951,658) → use os_click_at(x
       {
         name: 'os_browser_restart_with_cdp',
         description: `Restart Chromium browser (Chrome, Edge, Brave, Arc) with Chrome DevTools Protocol (CDP) enabled.
+Also works for CEF apps (Epic Games Launcher, Unreal Engine apps) — automatically detects and uses -cefdebug flag.
 
 This tool:
 1. Saves all open tabs (URLs)
 2. Closes the browser gracefully
-3. Relaunches with --remote-debugging-port=9222
+3. Relaunches with --remote-debugging-port=9222 (browsers) or -cefdebug=9225 (CEF apps)
 4. Restores all tabs
 5. Takes a screenshot automatically after restart to verify CDP is active
 
 Use this when:
 - Screenshot shows "Strategy: native (CDP not enabled ⚠️)"
+- Screenshot shows "Strategy: cef (CEF detected, CDP not active ⚠️)"
 - Browser warning suggests enabling CDP
 - You need 200-300+ elements instead of 20-40
 
-After restart, the screenshot will show "Strategy: browser (CDP active ✓)" and detect 10x more elements.`,
+After restart, the screenshot will show "Strategy: browser (CDP active ✓)" or "Strategy: cef (CEF CDP active ✓)" and detect 10x more elements.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -663,7 +665,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const browserInfo = activeWindow ? await detectBrowser(tree.windowClass, activeWindow.app) : null;
 
         // Build image info section with dimensions and ratio
-        const strategyInfo = `🔧 Strategy: ${tree.strategy}${tree.strategy === 'browser' ? ' (CDP active ✓)' : tree.strategy === 'unity' && tree.unityBridgeActive ? ' (Unity Bridge active ✓)' : tree.strategy === 'unity' && !tree.unityBridgeActive ? ' (native fallback, Bridge not connected ⚠️)' : tree.strategy === 'native' && browserInfo ? ' (CDP not enabled ⚠️)' : ''}`;
+        const strategyInfo = `🔧 Strategy: ${tree.strategy}${tree.strategy === 'browser' ? ' (CDP active ✓)' : tree.strategy === 'cef' && tree.ui.length >= 10 ? ' (CEF CDP active ✓)' : tree.strategy === 'cef' ? ' (CEF detected, CDP not active ⚠️)' : tree.strategy === 'unity' && tree.unityBridgeActive ? ' (Unity Bridge active ✓)' : tree.strategy === 'unity' && !tree.unityBridgeActive ? ' (native fallback, Bridge not connected ⚠️)' : tree.strategy === 'native' && browserInfo ? ' (CDP not enabled ⚠️)' : ''}`;
         const imageInfo = `📐 Screenshot: ${width}x${height} | Client: ${clientType} | Ratio: ${ratio.toFixed(3)}${taskbarInfo}`;
         const ratioHint = ratio > 1
           ? `⚠️ Image resized by client. For visual estimates, multiply coordinates by ${ratio.toFixed(3)}`
@@ -711,6 +713,10 @@ STEPS TO ENABLE CDP:
         // 2. Check for Unity game without Bridge (only warn if bridge is NOT active)
         else if (tree.strategy === 'unity' && !tree.unityBridgeActive && tree.ui.length < 10) {
           accessibilityWarning = `🎮 UNITY GAME DETECTED: "${tree.window}"\n⚠️ Strategy: native (Unity Bridge not running)\n\n💡 Unity Bridge provides 10x more elements.\n   Install: Copy OScribeBridge.dll to BepInEx/plugins/`;
+        }
+        // 2b. Check for CEF app without CDP (Unreal Engine / Epic Games etc.)
+        else if (tree.strategy === 'cef' && tree.ui.length < 10) {
+          accessibilityWarning = `🔧 CEF APP DETECTED: "${tree.window}"\n⚠️ Only ${tree.ui.length} elements (CDP not active)\n\n💡 To enable full element detection:\n   1. Close the app\n   2. Relaunch with: AppName.exe -cefdebug=9225\n   3. Take another screenshot\n\n   Or use os_browser_restart_with_cdp tool to restart automatically.`;
         }
         // 3. Check for Electron app with limited accessibility
         // Only warn if NVDA/VoiceOver is not running
@@ -1070,6 +1076,55 @@ STEPS TO ENABLE CDP:
           // Action recorded in the function itself
         });
 
+        // Check if active window is a CEF app (Unreal Engine / Epic Games etc.)
+        const uiTree = await getUIElements();
+        if (uiTree.strategy === 'cef') {
+          console.error(`CEF app detected, restarting with -cefdebug=${port === 9222 ? 9225 : port}...`);
+          const { restartCEFWithCDP } = await import('../core/browser-restart.js');
+          const cefResult = await restartCEFWithCDP(port === 9222 ? 9225 : port);
+
+          if (!cefResult.success) {
+            return {
+              content: [{
+                type: 'text',
+                text: `❌ Failed to restart CEF app with CDP: ${cefResult.error || 'Unknown error'}`,
+              }],
+              isError: true,
+            };
+          }
+
+          // Take screenshot to verify
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const cefScreenshot = await captureScreen({ screen: 0 });
+          const cefCursor = getMousePosition();
+          const cefTree = await getUIElements();
+
+          const cefWidth = cefScreenshot.width ?? 0;
+          const cefHeight = cefScreenshot.height ?? 0;
+          const cefClientVersion = server.getClientVersion();
+          const { ratio: cefRatio, clientType: cefClientType } = calculateImageRatio(cefWidth, cefHeight, cefClientVersion?.name);
+
+          const cefStrategyInfo = `🔧 Strategy: ${cefTree.strategy}${cefTree.strategy === 'cef' && cefTree.ui.length >= 10 ? ' (CEF CDP active ✓)' : ' (CEF CDP not active ⚠️)'}`;
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `✅ CEF app restarted with -cefdebug=${port === 9222 ? 9225 : port}!\n\n📊 Results:\n- CDP enabled: ${cefResult.cdpEnabled ? 'Yes ✓' : 'No ✗'}\n\n📸 Screenshot after restart:\n${cefStrategyInfo}\n📐 Screenshot: ${cefWidth}x${cefHeight} | Client: ${cefClientType} | Ratio: ${cefRatio.toFixed(3)}\nCursor: (${cefCursor.x}, ${cefCursor.y})\n\nElements detected: ${cefTree.ui.length}\n\nFirst 10 elements:\n${cefTree.ui.slice(0, 10).map((el) => {
+                  const cx = el.x + Math.floor(el.width / 2);
+                  const cy = el.y + Math.floor(el.height / 2);
+                  return `- ${el.type}: "${el.name}" center=(${cx},${cy})`;
+                }).join('\n')}`,
+              },
+              {
+                type: 'image',
+                data: cefScreenshot.base64,
+                mimeType: 'image/png',
+              },
+            ],
+          };
+        }
+
         console.error(`Restarting browser with CDP on port ${port}${window ? ` (targeting: ${window})` : ''}...`);
         const result = await restartBrowserWithCDP(port, window);
 
@@ -1258,21 +1313,8 @@ ${tree.ui.slice(0, 10).map((el) => {
 });
 
 export async function startServer(): Promise<void> {
-  // Auto-start NVDA on Windows for Electron/CEF app accessibility
-  // NVDA runs silently in background and enables accessibility tree for all Chromium-based apps
-  if (process.platform === 'win32') {
-    try {
-      const nvdaRunning = await isNvdaRunning();
-      if (!nvdaRunning) {
-        console.error('[OScribe] Starting NVDA for Electron/CEF accessibility...');
-        await startNvda();
-        console.error('[OScribe] NVDA started in silent mode');
-      }
-    } catch (err) {
-      // Non-blocking: NVDA is optional, will be started on-demand if needed
-      console.error('[OScribe] NVDA auto-start skipped:', err);
-    }
-  }
+  // NVDA is now started on-demand when Electron apps are detected (see uiautomation.ts)
+  // and auto-stopped after UI scan to avoid keyboard interference (config: nvda.autoStop)
 
   // Test log file writing
   const testLogFile = join(homedir(), 'Desktop', 'oscribe-mcp-server-test.log');

@@ -259,6 +259,23 @@ async function detectCDPPort(): Promise<number | null> {
 }
 
 /**
+ * Scan for CEF (Chromium Embedded Framework) debug ports.
+ * CEF apps (Epic Games Launcher, etc.) use -cefdebug=PORT flag.
+ * Scans ports 9225-9230 to avoid conflict with browser CDP on 9222-9224.
+ */
+export async function scanCEFPorts(): Promise<number | null> {
+  const cefPorts = [9225, 9226, 9227, 9228, 9229, 9230];
+
+  for (const port of cefPorts) {
+    if (await isCDPEnabled(port)) {
+      return port;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Check if CDP is enabled on a specific port
  *
  * @param port - Port number to check (default: 9222)
@@ -270,7 +287,9 @@ export async function isCDPEnabled(port = 9222): Promise<boolean> {
 
   try {
     console.error(`[browser] Checking CDP on port ${port}...`);
-    const response = await fetch(`http://localhost:${port}/json/version`, {
+    // Use 127.0.0.1 instead of localhost — CEF apps (Chrome/90) only bind IPv4,
+    // and Node 22+ fetch resolves localhost to ::1 (IPv6) first, causing failures.
+    const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
       signal: controller.signal,
     });
 

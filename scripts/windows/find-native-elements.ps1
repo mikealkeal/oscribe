@@ -45,12 +45,22 @@ foreach ($el in $allElements) {
         $rect = $el.Current.BoundingRectangle
         if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [System.Double]::IsInfinity($rect.X)) {
             $name = $el.Current.Name
-            if ($name -match '[a-zA-Z0-9\p{L}]') {
+            $helpText = $el.Current.HelpText
+            $autoId = $el.Current.AutomationId
+
+            # Include element if it has a name, tooltip (HelpText), or automationId
+            $hasName = $name -match '[a-zA-Z0-9\p{L}]'
+            $hasHelp = $helpText -and ($helpText -match '[a-zA-Z0-9\p{L}]')
+            $hasAutoId = $autoId -and ($autoId -match '[a-zA-Z0-9]')
+
+            if ($hasName -or $hasHelp -or $hasAutoId) {
+                # Use HelpText as name fallback when Name is empty
+                $displayName = if ($hasName) { $name } elseif ($hasHelp) { $helpText } else { $autoId }
                 $elements += @{
                     type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", ""
-                    name = $name
-                    description = $el.Current.HelpText
-                    automationId = $el.Current.AutomationId
+                    name = $displayName
+                    description = $helpText
+                    automationId = $autoId
                     x = [int]$rect.X
                     y = [int]$rect.Y
                     width = [int]$rect.Width
