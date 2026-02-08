@@ -170,6 +170,10 @@ function getRecorder(): SessionRecorder {
   return sessionRecorder;
 }
 
+// Track last window focused by os_focus so os_screenshot can re-focus it
+// (MCP clients like VS Code steal focus between tool calls)
+let lastFocusedWindow: string | null = null;
+
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -579,6 +583,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'os_screenshot': {
         const { screen } = ScreenshotSchema.parse(args);
+
+        // If os_focus was called before, use that window for UI tree
+        // (MCP clients like VS Code steal focus between tool calls)
+        const targetWindow = lastFocusedWindow;
+        lastFocusedWindow = null;
+
         const screenshot = await captureScreen({ screen });
         const cursor = getMousePosition();
 
@@ -588,8 +598,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const clientVersion = server.getClientVersion();
         const { ratio, clientType } = calculateImageRatio(width, height, clientVersion?.name);
 
-        // Get UI elements from focused window
-        const tree = await getUIElements();
+        // Get UI elements - use target window if set, otherwise foreground window
+        const tree = await getUIElements(targetWindow ?? undefined);
 
         // On Windows, always get system UI elements (taskbar, etc.)
         // Even if hidden (auto-hide), agent can move mouse to edge to reveal it
@@ -692,7 +702,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             chromium: 'open -a "Chromium" --args --remote-debugging-port=9222',
           };
 
-          const command = browserCommands[browserInfo.type] || `${browserInfo.type} --remote-debugging-port=9222`;
+          const command = browserCommands[browserInfo.type] ?? `${browserInfo.type} --remote-debugging-port=9222`;
           let platformCommand = command;
           if (process.platform === 'win32') {
             platformCommand = `start ${browserInfo.type === 'chrome' ? 'chrome' : browserInfo.type === 'edge' ? 'msedge' : browserInfo.type} --remote-debugging-port=9222`;
@@ -778,6 +788,10 @@ STEPS TO ENABLE CDP:
         await recorder.recordAction('os_focus', { window: windowName }, async () => {
           success = await focusWindow(windowName);
         });
+
+        if (success) {
+          lastFocusedWindow = windowName;
+        }
 
         return {
           content: [
@@ -885,7 +899,7 @@ STEPS TO ENABLE CDP:
         const elementsText = elements.map((el) => {
           const cx = el.x + Math.floor(el.width / 2);
           const cy = el.y + Math.floor(el.height / 2);
-          const source = (el as { source?: string }).source || 'unknown';
+          const source = (el as { source?: string }).source ?? 'unknown';
           return `- ${el.type}: "${el.name}" center=(${cx},${cy}) [${el.width}x${el.height}] source=${source}${el.automationId ? ` id="${el.automationId}"` : ''}`;
         }).join('\n');
 
@@ -1087,7 +1101,7 @@ STEPS TO ENABLE CDP:
             return {
               content: [{
                 type: 'text',
-                text: `❌ Failed to restart CEF app with CDP: ${cefResult.error || 'Unknown error'}`,
+                text: `❌ Failed to restart CEF app with CDP: ${cefResult.error ?? 'Unknown error'}`,
               }],
               isError: true,
             };
@@ -1132,7 +1146,7 @@ STEPS TO ENABLE CDP:
           return {
             content: [{
               type: 'text',
-              text: `❌ Failed to restart browser with CDP: ${result.error || 'Unknown error'}`,
+              text: `❌ Failed to restart browser with CDP: ${result.error ?? 'Unknown error'}`,
             }],
             isError: true,
           };

@@ -4,6 +4,8 @@
 #
 # Output: JSON { "position": "bottom", "autoHide": false, "visible": true }
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 Add-Type -AssemblyName UIAutomationClient
 
 $root = [System.Windows.Automation.AutomationElement]::RootElement

@@ -47,6 +47,7 @@ class MsaaReader
 
     static void Main(string[] args)
     {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
         searchTitle = args.Length > 0 ? args[0] : "SendStock";
 
         // Find window

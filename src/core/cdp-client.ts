@@ -50,16 +50,16 @@ const CIRCUIT_BREAKER_RESET_TIME = 30000; // 30 seconds
 
 // Simple logger
 const logger = {
-  debug: (msg: string, data?: Record<string, unknown>) => {
+  debug: (msg: string, data?: Record<string, unknown>): void => {
     if (process.env['DEBUG']) console.log(`[cdp-client] ${msg}`, data ?? '');
   },
-  info: (msg: string, data?: Record<string, unknown>) => {
+  info: (msg: string, data?: Record<string, unknown>): void => {
     console.log(`[cdp-client] ${msg}`, data ?? '');
   },
-  warn: (msg: string, data?: Record<string, unknown>) => {
+  warn: (msg: string, data?: Record<string, unknown>): void => {
     console.warn(`[cdp-client] ${msg}`, data ?? '');
   },
-  error: (msg: string, data?: Record<string, unknown>) => {
+  error: (msg: string, data?: Record<string, unknown>): void => {
     console.error(`[cdp-client] ${msg}`, data ?? '');
   },
 };

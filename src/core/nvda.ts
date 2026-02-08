@@ -27,16 +27,16 @@ const execAsync = promisify(exec);
 
 // Simple logger for NVDA module
 const logger = {
-  debug: (msg: string, data?: Record<string, unknown>) => {
+  debug: (msg: string, data?: Record<string, unknown>): void => {
     if (process.env['DEBUG']) console.log(`[nvda] ${msg}`, data ?? '');
   },
-  info: (msg: string, data?: Record<string, unknown>) => {
+  info: (msg: string, data?: Record<string, unknown>): void => {
     console.log(`[nvda] ${msg}`, data ?? '');
   },
-  warn: (msg: string, data?: Record<string, unknown>) => {
+  warn: (msg: string, data?: Record<string, unknown>): void => {
     console.warn(`[nvda] ${msg}`, data ?? '');
   },
-  error: (msg: string, data?: Record<string, unknown>) => {
+  error: (msg: string, data?: Record<string, unknown>): void => {
     console.error(`[nvda] ${msg}`, data ?? '');
   },
 };
@@ -55,7 +55,7 @@ const DEFAULT_NVDA_DIR = join(TOOLS_DIR, 'nvda');
  */
 function getNvdaPaths(): { dir: string; exe: string; configDir: string; configFile: string } {
   const config = loadConfig();
-  const nvdaDir = config.nvda.customPath || DEFAULT_NVDA_DIR;
+  const nvdaDir = config.nvda.customPath ?? DEFAULT_NVDA_DIR;
   return {
     dir: nvdaDir,
     exe: join(nvdaDir, 'nvda_noUIAccess.exe'),
@@ -449,7 +449,7 @@ export async function ensureNvdaForElectron(forceInstall = false): Promise<boole
 }
 
 // Export paths for testing/debugging (uses getNvdaPaths internally)
-export function getPaths() {
+export function getPaths(): { toolsDir: string; nvdaDir: string; nvdaExe: string; configDir: string; configFile: string } {
   const p = getNvdaPaths();
   return {
     toolsDir: TOOLS_DIR,

@@ -24,16 +24,16 @@ const isMacOS = process.platform === 'darwin';
 
 // Simple logger for VoiceOver module
 const logger = {
-  debug: (msg: string, data?: Record<string, unknown>) => {
+  debug: (msg: string, data?: Record<string, unknown>): void => {
     if (process.env['DEBUG']) console.log(`[voiceover] ${msg}`, data ?? '');
   },
-  info: (msg: string, data?: Record<string, unknown>) => {
+  info: (msg: string, data?: Record<string, unknown>): void => {
     console.log(`[voiceover] ${msg}`, data ?? '');
   },
-  warn: (msg: string, data?: Record<string, unknown>) => {
+  warn: (msg: string, data?: Record<string, unknown>): void => {
     console.warn(`[voiceover] ${msg}`, data ?? '');
   },
-  error: (msg: string, data?: Record<string, unknown>) => {
+  error: (msg: string, data?: Record<string, unknown>): void => {
     console.error(`[voiceover] ${msg}`, data ?? '');
   },
 };

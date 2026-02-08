@@ -92,16 +92,16 @@ const INTERACTIVE_ROLES = new Set([
 
 // Simple logger
 const logger = {
-  debug: (msg: string, data?: Record<string, unknown>) => {
+  debug: (msg: string, data?: Record<string, unknown>): void => {
     if (process.env['DEBUG']) console.log(`[cdp-elements] ${msg}`, data ?? '');
   },
-  info: (msg: string, data?: Record<string, unknown>) => {
+  info: (msg: string, data?: Record<string, unknown>): void => {
     console.log(`[cdp-elements] ${msg}`, data ?? '');
   },
-  warn: (msg: string, data?: Record<string, unknown>) => {
+  warn: (msg: string, data?: Record<string, unknown>): void => {
     console.warn(`[cdp-elements] ${msg}`, data ?? '');
   },
-  error: (msg: string, data?: Record<string, unknown>) => {
+  error: (msg: string, data?: Record<string, unknown>): void => {
     console.error(`[cdp-elements] ${msg}`, data ?? '');
   },
 };
@@ -209,14 +209,14 @@ async function convertAXNodeToUIElement(
   }
 
   const role = node.role.value;
-  const type = ROLE_TO_TYPE[role] || 'Control';
+  const type = ROLE_TO_TYPE[role] ?? 'Control';
 
   // Filter non-interactive elements (unless they're specific types we want)
   if (!INTERACTIVE_ROLES.has(role) && type === 'Control') {
     return null;
   }
 
-  const name = node.name?.value || '';
+  const name = node.name?.value ?? '';
 
   // Skip unnamed non-interactive elements
   if (!name && !INTERACTIVE_ROLES.has(role)) {

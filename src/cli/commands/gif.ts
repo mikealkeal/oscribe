@@ -29,7 +29,7 @@ interface GifOptions {
  */
 function getSessionsDir(): string {
   const config = loadConfig();
-  return config.sessionDir || join(homedir(), '.oscribe', 'sessions');
+  return config.sessionDir ?? join(homedir(), '.oscribe', 'sessions');
 }
 
 /**
@@ -80,8 +80,8 @@ function getScreenshots(sessionId: string): string[] {
     .filter((f) => f.endsWith('.png'))
     .sort((a, b) => {
       // Sort by index (format: 0_label.png, 1_label.png, ...)
-      const indexA = parseInt(a.split('_')[0] || '0', 10);
-      const indexB = parseInt(b.split('_')[0] || '0', 10);
+      const indexA = parseInt(a.split('_')[0] ?? '0', 10);
+      const indexB = parseInt(b.split('_')[0] ?? '0', 10);
       return indexA - indexB;
     })
     .map((f) => join(screenshotsDir, f));
@@ -179,7 +179,7 @@ export function gifCommand(): Command {
           process.exit(1);
         }
 
-        const targetSessionId = sessionId || sessions[0]?.id;
+        const targetSessionId = sessionId ?? sessions[0]?.id;
         if (!targetSessionId) {
           console.error(chalk.red('No session found'));
           process.exit(1);
@@ -256,9 +256,9 @@ export function gifCommand(): Command {
         }
 
         // Create GIF
-        const delay = parseInt(options.delay || '500', 10);
+        const delay = parseInt(options.delay ?? '500', 10);
         const scale = options.scale ? parseInt(options.scale, 10) : undefined;
-        const outputPath = options.output || join(sessionDir, 'session.gif');
+        const outputPath = options.output ?? join(sessionDir, 'session.gif');
 
         const spinner = ora('Creating GIF...').start();
 

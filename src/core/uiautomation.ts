@@ -22,7 +22,7 @@ import { restartBrowserWithCDP } from './browser-restart.js';
 import { detectUnityGame, isUnityBridgeAvailable, getUnityElements } from './unity-bridge.js';
 
 // Cache-busting dynamic import for detectBrowser
-async function getDetectBrowser() {
+async function getDetectBrowser(): Promise<typeof import('./browser.js').detectBrowser> {
   const timestamp = Date.now();
   const module = await import(`./browser.js?t=${timestamp}`);
   return module.detectBrowser;
@@ -102,7 +102,7 @@ function detectStrategy(windowClass: string, processName?: string): 'native' | '
   const config = loadWindowTypesConfig();
 
   // Check Unity first (highest priority after browser)
-  if (detectUnityGame(processName || '', windowClass)) {
+  if (detectUnityGame(processName ?? '', windowClass)) {
     return 'unity';
   }
 
@@ -284,6 +284,12 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
       elements = [...elements, ...toolbarElements];
     }
 
+    // Supplement with Win32 control items (TreeView, ListView, ComboBox items)
+    const controlElements = await findWin32ControlElements(windowInfo.name);
+    if (controlElements.length > 0) {
+      elements = [...elements, ...controlElements];
+    }
+
     // Heuristic: if few elements found, try document search
     if (elements.length < 10) {
       const docElements = await findDocumentElements(windowInfo.name);
@@ -386,6 +392,47 @@ async function findWin32ToolbarElements(windowTitle: string): Promise<UIElement[
         width: el.width,
         height: el.height,
         isEnabled: true,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Find Win32 control items (TreeView, ListView, ComboBox) via cross-process memory reading.
+ * Reads SysTreeView32, SysListView32, ComboBox/ComboBoxEx32 items.
+ * Essential for wxWidgets/MFC/Win32 apps where UIA only shows generic Panes.
+ */
+async function findWin32ControlElements(windowTitle: string): Promise<UIElement[]> {
+  if (process.platform !== 'win32') return [];
+
+  const readerPath = join(__dirname, '..', '..', '..', 'bin', 'Win32ControlReader.exe');
+  if (!existsSync(readerPath)) return [];
+
+  try {
+    const safeTitle = windowTitle.replace(/"/g, '\\"');
+    const { stdout } = await execAsync(`"${readerPath}" "${safeTitle}"`, {
+      timeout: 10000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    const result = stdout.trim();
+    if (!result || result === '[]') return [];
+
+    const parsed = JSON.parse(result);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((el: { name?: string }) => el.name && el.name.length > 0)
+      .map((el: { type: string; name: string; x: number; y: number; width: number; height: number; value?: string; depth?: number; selected?: boolean; index?: number }) => ({
+        type: el.type ?? 'Custom',
+        name: el.name,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        isEnabled: true,
+        ...(el.value ? { value: el.value } : {}),
       }));
   } catch {
     return [];
@@ -602,7 +649,7 @@ async function getBrowserElementsViaCDP(windowClass: string, windowTitle: string
       const restartResult = await restartBrowserWithCDP(9222, appName);
 
       if (!restartResult.success || !restartResult.cdpEnabled) {
-        throw new Error(`Failed to restart browser with CDP: ${restartResult.error || 'unknown error'}`);
+        throw new Error(`Failed to restart browser with CDP: ${restartResult.error ?? 'unknown error'}`);
       }
 
       console.log(`[uiautomation] Browser restarted with CDP (${restartResult.tabsRestored}/${restartResult.tabsSaved} tabs restored)`);
@@ -616,7 +663,7 @@ async function getBrowserElementsViaCDP(windowClass: string, windowTitle: string
 
     // 2. Connect to CDP
     const cdp = await connectCDP({
-      port: browserInfo.debugPort || 9222,
+      port: browserInfo.debugPort ?? 9222,
       host: 'localhost',
     });
 
@@ -705,7 +752,7 @@ async function findMsaaElements(windowTitle: string): Promise<UIElement[]> {
     }
 
     // Map MSAA elements to UIElement format
-    return (result.elements || []).map(
+    return ((result.elements as { type: string; name: string; x: number; y: number; width: number; height: number }[]) ?? []).map(
       (el: { type: string; name: string; x: number; y: number; width: number; height: number }) => ({
         type: el.type,
         name: el.name || '',
@@ -738,7 +785,7 @@ async function getUIElementsMacOS(windowTitle?: string): Promise<UITree> {
   const { getActiveWindow } = await import('./windows.js');
   const activeWindow = await getActiveWindow();
 
-  const targetWindow = windowTitle || (activeWindow?.title ?? '');
+  const targetWindow = windowTitle ?? (activeWindow?.title ?? '');
   const appName = activeWindow?.app ?? '';
 
   // Debug log to file

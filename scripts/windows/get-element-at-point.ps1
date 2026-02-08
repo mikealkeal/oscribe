@@ -18,6 +18,8 @@ param(
     [int]$Y
 )
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName PresentationCore
 

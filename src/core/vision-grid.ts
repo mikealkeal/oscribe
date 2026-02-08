@@ -298,7 +298,7 @@ export async function captureWithVisionGrid(
     );
   } finally {
     // Cleanup temp files (best effort, log errors for debugging)
-    const cleanup = async (path: string) => {
+    const cleanup = async (path: string): Promise<void> => {
       try {
         await unlink(path);
       } catch {

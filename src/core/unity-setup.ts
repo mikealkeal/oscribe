@@ -272,9 +272,7 @@ async function analyzeGame(gamePath?: string): Promise<GameAnalysis> {
   const platform = isWindows ? 'windows' : 'macos';
 
   // Resolve game path
-  if (!gamePath) {
-    gamePath = await detectGamePathFromWindow();
-  }
+  gamePath ??= await detectGamePathFromWindow();
   if (!existsSync(gamePath)) {
     throw new UnitySetupError(`Game folder not found: ${gamePath}`, 'GAME_NOT_FOUND');
   }

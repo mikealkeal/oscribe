@@ -32,6 +32,7 @@ export async function listWindows(): Promise<WindowInfo[]> {
 
 async function listWindowsWindows(): Promise<WindowInfo[]> {
   const psScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
 Add-Type -AssemblyName UIAutomationClient;
 Add-Type @"
 using System;
@@ -46,6 +47,12 @@ public class Win32 {
     public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")]
     public static extern int GetWindowTextLength(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT {
+        public int Left, Top, Right, Bottom;
+    }
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 }
 "@;
@@ -60,7 +67,17 @@ $callback = {
             [Win32]::GetWindowText($hwnd, $sb, $sb.Capacity) | Out-Null;
             $title = $sb.ToString();
             if ($title) {
-                $windows.Add("$hwnd|$title") | Out-Null;
+                $rect = New-Object Win32+RECT;
+                $gotRect = [Win32]::GetWindowRect($hwnd, [ref]$rect);
+                if ($gotRect) {
+                    $bx = $rect.Left;
+                    $by = $rect.Top;
+                    $bw = $rect.Right - $rect.Left;
+                    $bh = $rect.Bottom - $rect.Top;
+                    $windows.Add("$hwnd|$title|$bx|$by|$bw|$bh") | Out-Null;
+                } else {
+                    $windows.Add("$hwnd|$title") | Out-Null;
+                }
             }
         }
     }
@@ -80,6 +97,19 @@ $windows | ForEach-Object { Write-Output $_ };
     return lines.map((line) => {
       const parts = line.trim().split('|');
       const id = parts[0] ?? '';
+      // Title may contain '|', but bounds are always the last 4 numeric fields
+      // Format: hwnd|title|x|y|w|h — title cannot start with a digit after '|'
+      // Safe approach: check if last 4 parts are numeric
+      if (parts.length >= 6) {
+        const maybeH = parseInt(parts[parts.length - 1]!, 10);
+        const maybeW = parseInt(parts[parts.length - 2]!, 10);
+        const maybeY = parseInt(parts[parts.length - 3]!, 10);
+        const maybeX = parseInt(parts[parts.length - 4]!, 10);
+        if (!isNaN(maybeX) && !isNaN(maybeY) && !isNaN(maybeW) && !isNaN(maybeH)) {
+          const title = parts.slice(1, parts.length - 4).join('|');
+          return { id, title, bounds: { x: maybeX, y: maybeY, width: maybeW, height: maybeH } };
+        }
+      }
       const title = parts.slice(1).join('|');
       return { id, title };
     });
@@ -238,6 +268,12 @@ public class Win32Active {
     public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")]
     public static extern int GetWindowTextLength(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT {
+        public int Left, Top, Right, Bottom;
+    }
 }
 "@;
 
@@ -246,13 +282,23 @@ if ($hwnd -eq [IntPtr]::Zero) {
     exit 1;
 }
 $length = [Win32Active]::GetWindowTextLength($hwnd);
-if ($length -eq 0) {
-    Write-Output "$hwnd|";
-    exit 0;
+$title = "";
+if ($length -gt 0) {
+    $sb = New-Object System.Text.StringBuilder($length + 1);
+    [Win32Active]::GetWindowText($hwnd, $sb, $sb.Capacity) | Out-Null;
+    $title = $sb.ToString();
 }
-$sb = New-Object System.Text.StringBuilder($length + 1);
-[Win32Active]::GetWindowText($hwnd, $sb, $sb.Capacity) | Out-Null;
-Write-Output "$hwnd|$($sb.ToString())";
+$rect = New-Object Win32Active+RECT;
+$gotRect = [Win32Active]::GetWindowRect($hwnd, [ref]$rect);
+if ($gotRect) {
+    $bx = $rect.Left;
+    $by = $rect.Top;
+    $bw = $rect.Right - $rect.Left;
+    $bh = $rect.Bottom - $rect.Top;
+    Write-Output "$hwnd|$title|$bx|$by|$bw|$bh";
+} else {
+    Write-Output "$hwnd|$title";
+}
 `;
 
   try {
@@ -266,7 +312,17 @@ Write-Output "$hwnd|$($sb.ToString())";
 
     const parts = line.split('|');
     const id = parts[0] ?? '';
-    const title = parts.slice(1).join('|');
+    const title = parts[1] ?? '';
+    // Parse bounds if available (parts[2..5])
+    if (parts.length >= 6) {
+      const x = parseInt(parts[2]!, 10);
+      const y = parseInt(parts[3]!, 10);
+      const width = parseInt(parts[4]!, 10);
+      const height = parseInt(parts[5]!, 10);
+      if (!isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height)) {
+        return { id, title, bounds: { x, y, width, height } };
+      }
+    }
     return { id, title };
   } catch {
     return null;

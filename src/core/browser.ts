@@ -31,13 +31,13 @@ export interface BrowserInfo {
 
 // Simple logger
 const logger = {
-  debug: (msg: string, data?: Record<string, unknown>) => {
+  debug: (msg: string, data?: Record<string, unknown>): void => {
     if (process.env['DEBUG']) console.log(`[browser] ${msg}`, data ?? '');
   },
-  info: (msg: string, data?: Record<string, unknown>) => {
+  info: (msg: string, data?: Record<string, unknown>): void => {
     console.log(`[browser] ${msg}`, data ?? '');
   },
-  warn: (msg: string, data?: Record<string, unknown>) => {
+  warn: (msg: string, data?: Record<string, unknown>): void => {
     console.warn(`[browser] ${msg}`, data ?? '');
   },
 };

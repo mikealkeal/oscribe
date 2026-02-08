@@ -9,6 +9,8 @@ param(
     [string]$WindowName
 )
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 Add-Type -AssemblyName UIAutomationClient
 
 $root = [System.Windows.Automation.AutomationElement]::RootElement
@@ -67,6 +69,49 @@ foreach ($el in $allElements) {
                     height = [int]$rect.Height
                     isEnabled = $el.Current.IsEnabled
                 }
+            }
+        }
+    } catch {}
+}
+
+# Also scan popup menus — they are separate top-level windows (#32768),
+# NOT descendants of the main window. Captures dropdown menus, context menus, etc.
+$menuCondition = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Menu
+)
+$popupMenus = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $menuCondition)
+foreach ($menu in $popupMenus) {
+    try {
+        $menuRect = $menu.Current.BoundingRectangle
+        if ($menuRect.Width -gt 0 -and $menuRect.Height -gt 0 -and -not [System.Double]::IsInfinity($menuRect.X)) {
+            $menuItems = $menu.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+            foreach ($el in $menuItems) {
+                try {
+                    $rect = $el.Current.BoundingRectangle
+                    if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [System.Double]::IsInfinity($rect.X)) {
+                        $name = $el.Current.Name
+                        $helpText = $el.Current.HelpText
+                        $autoId = $el.Current.AutomationId
+                        $hasName = $name -match '[a-zA-Z0-9\p{L}]'
+                        $hasHelp = $helpText -and ($helpText -match '[a-zA-Z0-9\p{L}]')
+                        $hasAutoId = $autoId -and ($autoId -match '[a-zA-Z0-9]')
+                        if ($hasName -or $hasHelp -or $hasAutoId) {
+                            $displayName = if ($hasName) { $name } elseif ($hasHelp) { $helpText } else { $autoId }
+                            $elements += @{
+                                type = $el.Current.ControlType.ProgrammaticName -replace "ControlType.", ""
+                                name = $displayName
+                                description = $helpText
+                                automationId = $autoId
+                                x = [int]$rect.X
+                                y = [int]$rect.Y
+                                width = [int]$rect.Width
+                                height = [int]$rect.Height
+                                isEnabled = $el.Current.IsEnabled
+                            }
+                        }
+                    }
+                } catch {}
             }
         }
     } catch {}

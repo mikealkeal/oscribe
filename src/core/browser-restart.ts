@@ -53,7 +53,7 @@ function getDefaultChromeProfilePath(): string {
   if (process.platform === 'darwin') {
     return join(homedir(), 'Library/Application Support/Google/Chrome');
   } else if (process.platform === 'win32') {
-    return join(process.env['APPDATA'] || '', 'Google/Chrome/User Data');
+    return join(process.env['APPDATA'] ?? '', 'Google/Chrome/User Data');
   } else {
     // Linux
     return join(homedir(), '.config/google-chrome');
@@ -446,11 +446,11 @@ async function restoreTabs(urls: string[], port = 9222): Promise<number> {
  * @param windowApp - Optional app name to target (e.g., "Google Chrome"). If not provided, uses active window.
  */
 export async function restartBrowserWithCDP(port = 9222, windowApp?: string): Promise<BrowserRestartResult> {
-  log(`>>> restartBrowserWithCDP called with port ${port}, windowApp=${windowApp || 'auto-detect'}`);
+  log(`>>> restartBrowserWithCDP called with port ${port}, windowApp=${windowApp ?? 'auto-detect'}`);
   const event = {
     action: 'restart_browser_cdp',
     port,
-    windowApp: windowApp || 'auto-detect',
+    windowApp: windowApp ?? 'auto-detect',
     timestamp: new Date().toISOString(),
     duration_ms: 0,
     success: false,
