@@ -1,9 +1,11 @@
-// Win32ControlReader.cs - Read TreeView, ListView, ComboBox items via cross-process memory
+// Win32ControlReader.cs - Read Win32 control items via cross-process memory
 // Compile: csc /platform:x64 /target:exe /out:Win32ControlReader.exe Win32ControlReader.cs
 // Usage: Win32ControlReader.exe "Window Title" [--debug]
 //
-// Detects SysTreeView32, SysListView32, ComboBox, ComboBoxEx32 controls
-// and reads their items using Win32 messages with cross-process memory.
+// Reads items from Win32 common controls that UIA doesn't expose:
+// - SysTreeView32, SysListView32, ComboBox/ComboBoxEx32 (specific readers)
+// - SysTabControl32 (tab items), msctls_statusbar32 (status bar parts)
+// - Generic catch-all for ALL other visible child windows with text
 // Works for native apps (wxWidgets, MFC, Win32) where UIA doesn't expose items.
 
 using System;
@@ -71,6 +73,12 @@ class Win32ControlReader
     [DllImport("user32.dll")]
     static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
 
+    [DllImport("user32.dll")]
+    static extern IntPtr GetMenu(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    static extern IntPtr GetSubMenu(IntPtr hMenu, int nPos);
+
     delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -114,6 +122,21 @@ class Win32ControlReader
     const uint CB_GETLBTEXT       = 0x0148;
     const uint CB_GETCURSEL       = 0x0147;
 
+    // ── TabControl Messages ─────────────────────────────────────────
+    const uint TCM_GETITEMCOUNT   = 0x1304;
+    const uint TCM_GETITEMW       = 0x133C;
+    const uint TCM_GETITEMRECT    = 0x130A;
+    const uint TCM_GETCURSEL      = 0x130B;
+
+    // TCITEM mask
+    const uint TCIF_TEXT          = 0x0001;
+
+    // ── StatusBar Messages ──────────────────────────────────────────
+    const uint SB_GETPARTS        = 0x0406;
+    const uint SB_GETTEXTLENGTHW  = 0x040C;
+    const uint SB_GETTEXTW        = 0x040D;
+    const uint SB_GETRECT         = 0x040A;
+
     // ── Menu Messages & API ──────────────────────────────────────────
     const uint MN_GETHMENU        = 0x01E1;
     const uint MIIM_STRING        = 0x0040;
@@ -141,7 +164,7 @@ class Win32ControlReader
     {
         public IntPtr hwnd;
         public string className;
-        public string controlType; // "TreeView", "ListView", "ComboBox"
+        public string controlType; // "TreeView", "ListView", "ComboBox", "TabControl", "StatusBar", "Generic"
     }
 
     static void Debug(string msg)
@@ -187,21 +210,95 @@ class Win32ControlReader
             return;
         }
 
-        // Find all target child controls
+        // Find all target child controls — specific readers + generic catch-all
+        var handledHwnds = new HashSet<IntPtr>();
         EnumChildWindows(targetHwnd, (hwnd, lParam) => {
             var className = new StringBuilder(256);
             GetClassName(hwnd, className, 256);
             string cls = className.ToString();
 
             if (cls == "SysTreeView32")
+            {
                 controls.Add(new ControlInfo { hwnd = hwnd, className = cls, controlType = "TreeView" });
+                handledHwnds.Add(hwnd);
+            }
             else if (cls == "SysListView32")
+            {
                 controls.Add(new ControlInfo { hwnd = hwnd, className = cls, controlType = "ListView" });
+                handledHwnds.Add(hwnd);
+            }
             else if (cls == "ComboBox" || cls == "ComboBoxEx32")
+            {
                 controls.Add(new ControlInfo { hwnd = hwnd, className = cls, controlType = "ComboBox" });
+                handledHwnds.Add(hwnd);
+            }
+            else if (cls == "SysTabControl32")
+            {
+                controls.Add(new ControlInfo { hwnd = hwnd, className = cls, controlType = "TabControl" });
+                handledHwnds.Add(hwnd);
+            }
+            else if (cls == "msctls_statusbar32")
+            {
+                controls.Add(new ControlInfo { hwnd = hwnd, className = cls, controlType = "StatusBar" });
+                handledHwnds.Add(hwnd);
+            }
 
             return true;
         }, IntPtr.Zero);
+
+        // Generic catch-all: enumerate ALL visible child windows with text
+        // Catches controls UIA misses that aren't covered by specific readers above
+        EnumChildWindows(targetHwnd, (hwnd, lParam) => {
+            if (handledHwnds.Contains(hwnd)) return true; // Already handled
+            if (!IsWindowVisible(hwnd)) return true;
+
+            int textLen = GetWindowTextLength(hwnd);
+            if (textLen <= 0) return true;
+
+            var textBuf = new StringBuilder(textLen + 1);
+            GetWindowText(hwnd, textBuf, textBuf.Capacity);
+            string text = textBuf.ToString();
+            if (string.IsNullOrEmpty(text)) return true;
+
+            RECT rect;
+            GetWindowRect(hwnd, out rect);
+            int w = rect.Right - rect.Left;
+            int h = rect.Bottom - rect.Top;
+            if (w <= 0 || h <= 0) return true;
+
+            var className = new StringBuilder(256);
+            GetClassName(hwnd, className, 256);
+            string cls = className.ToString();
+
+            // Skip generic containers (just noise)
+            if (cls == "ScrollBar" || cls == "tooltips_class32" || cls == "#32770") return true;
+
+            elements.Add(new Dictionary<string, object> {
+                {"type", MapWin32Class(cls)},
+                {"name", text},
+                {"x", rect.Left},
+                {"y", rect.Top},
+                {"width", w},
+                {"height", h}
+            });
+            Debug("  Generic[" + cls + "]: " + text);
+
+            return true;
+        }, IntPtr.Zero);
+
+        // Read window menu bar (HMENU) — catches Fichier/Édition/Affichage etc.
+        // Native HMENU menus live in the non-client area, NOT as child windows.
+        // wxWidgets, MFC, and all native Win32 apps use HMENU for their menu bar.
+        IntPtr hMenuBar = GetMenu(targetHwnd);
+        if (hMenuBar != IntPtr.Zero)
+        {
+            int menuCount = GetMenuItemCount(hMenuBar);
+            if (menuCount > 0)
+            {
+                Debug("Menu bar has " + menuCount + " items");
+                ReadMenuBarItems(hMenuBar, targetHwnd, menuCount);
+            }
+        }
 
         // Also find any visible popup menus (#32768) owned by the same process
         uint targetProcessId;
@@ -267,6 +364,10 @@ class Win32ControlReader
                     ReadListView(ctrl.hwnd, hProcess);
                 else if (ctrl.controlType == "ComboBox")
                     ReadComboBox(ctrl.hwnd, hProcess);
+                else if (ctrl.controlType == "TabControl")
+                    ReadTabControl(ctrl.hwnd, hProcess);
+                else if (ctrl.controlType == "StatusBar")
+                    ReadStatusBar(ctrl.hwnd, hProcess);
             }
         }
         finally
@@ -562,6 +663,267 @@ class Win32ControlReader
         finally
         {
             VirtualFreeEx(hProcess, remoteMem, 0, MEM_RELEASE);
+        }
+    }
+
+    // ── TabControl Reader ─────────────────────────────────────────────
+    static void ReadTabControl(IntPtr tabHwnd, IntPtr hProcess)
+    {
+        int count = (int)SendMessage(tabHwnd, TCM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero);
+        if (count <= 0 || count > 50) return; // Safety limit
+
+        int curSel = (int)SendMessage(tabHwnd, TCM_GETCURSEL, IntPtr.Zero, IntPtr.Zero);
+
+        Debug("TabControl has " + count + " items, selected=" + curSel);
+
+        // TCITEMW on x64: 40 bytes
+        // offset 0: mask (4), offset 4: dwState (4), offset 8: dwStateMask (4),
+        // offset 12: padding (4), offset 16: pszText (8), offset 24: cchTextMax (4),
+        // offset 28: iImage (4), offset 32: lParam (8)
+        int tcItemSize = 40;
+        int textBufSize = 256;
+        int totalAlloc = tcItemSize + textBufSize * 2 + 16;
+        IntPtr remoteMem = VirtualAllocEx(hProcess, IntPtr.Zero, totalAlloc, MEM_COMMIT, PAGE_READWRITE);
+        if (remoteMem == IntPtr.Zero) return;
+
+        IntPtr remoteTextBuf = new IntPtr(remoteMem.ToInt64() + tcItemSize + 8);
+
+        try
+        {
+            for (int i = 0; i < count; i++)
+            {
+                // Build TCITEMW
+                byte[] tcItem = new byte[tcItemSize];
+                Array.Clear(tcItem, 0, tcItemSize);
+                BitConverter.GetBytes((uint)TCIF_TEXT).CopyTo(tcItem, 0);           // mask
+                BitConverter.GetBytes(remoteTextBuf.ToInt64()).CopyTo(tcItem, 16);   // pszText
+                BitConverter.GetBytes(textBufSize).CopyTo(tcItem, 24);              // cchTextMax
+
+                int bw;
+                WriteProcessMemory(hProcess, remoteMem, tcItem, tcItemSize, out bw);
+
+                SendMessage(tabHwnd, TCM_GETITEMW, (IntPtr)i, remoteMem);
+
+                // Read text
+                byte[] textBytes = new byte[textBufSize * 2];
+                int br;
+                ReadProcessMemory(hProcess, remoteTextBuf, textBytes, textBytes.Length, out br);
+                string text = Encoding.Unicode.GetString(textBytes).TrimEnd('\0');
+                if (text.IndexOf('\0') >= 0) text = text.Substring(0, text.IndexOf('\0'));
+
+                if (string.IsNullOrEmpty(text)) continue;
+
+                // Get item rect (client coordinates)
+                int x = 0, y = 0, w = 0, h = 0;
+                byte[] rectInput = new byte[16];
+                Array.Clear(rectInput, 0, 16);
+                WriteProcessMemory(hProcess, remoteMem, rectInput, 16, out bw);
+                IntPtr result = SendMessage(tabHwnd, TCM_GETITEMRECT, (IntPtr)i, remoteMem);
+                if (result != IntPtr.Zero)
+                {
+                    byte[] rectBuf = new byte[16];
+                    ReadProcessMemory(hProcess, remoteMem, rectBuf, 16, out br);
+                    int left = BitConverter.ToInt32(rectBuf, 0);
+                    int top = BitConverter.ToInt32(rectBuf, 4);
+                    int right = BitConverter.ToInt32(rectBuf, 8);
+                    int bottom = BitConverter.ToInt32(rectBuf, 12);
+
+                    // Convert client to screen
+                    POINT pt;
+                    pt.X = left; pt.Y = top;
+                    ClientToScreen(tabHwnd, ref pt);
+                    x = pt.X; y = pt.Y;
+                    w = right - left;
+                    h = bottom - top;
+                }
+
+                elements.Add(new Dictionary<string, object> {
+                    {"type", "TabItem"},
+                    {"name", text},
+                    {"x", x},
+                    {"y", y},
+                    {"width", w},
+                    {"height", h},
+                    {"selected", i == curSel}
+                });
+
+                Debug("  TabItem[" + i + "]: " + text + (i == curSel ? " (selected)" : ""));
+            }
+        }
+        finally
+        {
+            VirtualFreeEx(hProcess, remoteMem, 0, MEM_RELEASE);
+        }
+    }
+
+    // ── StatusBar Reader ─────────────────────────────────────────────
+    static void ReadStatusBar(IntPtr sbHwnd, IntPtr hProcess)
+    {
+        // Get number of parts
+        int partCount = (int)SendMessage(sbHwnd, SB_GETPARTS, IntPtr.Zero, IntPtr.Zero);
+        if (partCount <= 0 || partCount > 20) return; // Safety limit
+
+        Debug("StatusBar has " + partCount + " parts");
+
+        int textBufSize = 512;
+        IntPtr remoteMem = VirtualAllocEx(hProcess, IntPtr.Zero, textBufSize * 2, MEM_COMMIT, PAGE_READWRITE);
+        if (remoteMem == IntPtr.Zero) return;
+
+        try
+        {
+            for (int i = 0; i < partCount; i++)
+            {
+                // Get text length
+                int textInfo = (int)SendMessage(sbHwnd, SB_GETTEXTLENGTHW, (IntPtr)i, IntPtr.Zero);
+                int textLen = textInfo & 0xFFFF;
+                if (textLen <= 0 || textLen > textBufSize) continue;
+
+                // Get text
+                SendMessage(sbHwnd, SB_GETTEXTW, (IntPtr)i, remoteMem);
+
+                byte[] textBytes = new byte[(textLen + 1) * 2];
+                int br;
+                ReadProcessMemory(hProcess, remoteMem, textBytes, textBytes.Length, out br);
+                string text = Encoding.Unicode.GetString(textBytes).TrimEnd('\0');
+                if (text.IndexOf('\0') >= 0) text = text.Substring(0, text.IndexOf('\0'));
+
+                if (string.IsNullOrEmpty(text)) continue;
+
+                // Get part rect (client coordinates)
+                int x = 0, y = 0, w = 0, h = 0;
+                IntPtr result = SendMessage(sbHwnd, SB_GETRECT, (IntPtr)i, remoteMem);
+                if (result != IntPtr.Zero)
+                {
+                    byte[] rectBuf = new byte[16];
+                    ReadProcessMemory(hProcess, remoteMem, rectBuf, 16, out br);
+                    int left = BitConverter.ToInt32(rectBuf, 0);
+                    int top = BitConverter.ToInt32(rectBuf, 4);
+                    int right = BitConverter.ToInt32(rectBuf, 8);
+                    int bottom = BitConverter.ToInt32(rectBuf, 12);
+
+                    POINT pt;
+                    pt.X = left; pt.Y = top;
+                    ClientToScreen(sbHwnd, ref pt);
+                    x = pt.X; y = pt.Y;
+                    w = right - left;
+                    h = bottom - top;
+                }
+
+                elements.Add(new Dictionary<string, object> {
+                    {"type", "StatusBarItem"},
+                    {"name", text},
+                    {"x", x},
+                    {"y", y},
+                    {"width", w},
+                    {"height", h}
+                });
+
+                Debug("  StatusBarItem[" + i + "]: " + text);
+            }
+        }
+        finally
+        {
+            VirtualFreeEx(hProcess, remoteMem, 0, MEM_RELEASE);
+        }
+    }
+
+    // ── Win32 Class → UI Type ────────────────────────────────────────
+    static string MapWin32Class(string className)
+    {
+        switch (className)
+        {
+            case "Button": return "Button";
+            case "Static": return "Text";
+            case "Edit": return "Edit";
+            case "RichEdit": case "RichEdit20W": case "RICHEDIT50W": return "Edit";
+            case "ListBox": case "ComboLBox": return "ListBox";
+            case "msctls_trackbar32": return "Slider";
+            case "msctls_updown32": return "Spinner";
+            case "msctls_progress32": return "ProgressBar";
+            case "msctls_hotkey32": return "HotKey";
+            case "SysDateTimePick32": return "DatePicker";
+            case "SysMonthCal32": return "Calendar";
+            case "SysIPAddress32": return "IPAddress";
+            case "SysLink": return "Link";
+            case "SysHeader32": return "Header";
+            case "ReBarWindow32": return "Toolbar";
+            case "ToolbarWindow32": return "Toolbar";
+            default: return "Control";
+        }
+    }
+
+    // ── Menu Bar Reader ─────────────────────────────────────────────
+    // Reads HMENU-based menu bar items (Fichier, Édition, Affichage, etc.)
+    // and recurses one level into submenus for dropdown items.
+    static void ReadMenuBarItems(IntPtr hMenu, IntPtr ownerHwnd, int count)
+    {
+        byte[] textBuf = new byte[512];
+        GCHandle handle = GCHandle.Alloc(textBuf, GCHandleType.Pinned);
+
+        try
+        {
+            IntPtr textPtr = handle.AddrOfPinnedObject();
+            int miiSize = 80; // MENUITEMINFOW on x64
+
+            for (uint i = 0; i < (uint)count; i++)
+            {
+                Array.Clear(textBuf, 0, textBuf.Length);
+
+                byte[] mii = new byte[miiSize];
+                Array.Clear(mii, 0, miiSize);
+                BitConverter.GetBytes(miiSize).CopyTo(mii, 0);                                    // cbSize
+                BitConverter.GetBytes(MIIM_STRING | MIIM_FTYPE | MIIM_SUBMENU).CopyTo(mii, 4);     // fMask
+                BitConverter.GetBytes(textPtr.ToInt64()).CopyTo(mii, 56);                           // dwTypeData
+                BitConverter.GetBytes(256).CopyTo(mii, 64);                                        // cch
+
+                bool ok = GetMenuItemInfoW(hMenu, i, true, mii);
+                if (!ok) continue;
+
+                uint fType = BitConverter.ToUInt32(mii, 8);
+                if ((fType & MFT_SEPARATOR) != 0) continue;
+
+                string text = Encoding.Unicode.GetString(textBuf).TrimEnd('\0');
+                if (text.IndexOf('\0') >= 0) text = text.Substring(0, text.IndexOf('\0'));
+                text = text.Replace("&", ""); // Strip accelerator markers
+                if (string.IsNullOrEmpty(text)) continue;
+
+                // Get item rect
+                RECT itemRect;
+                int x = 0, y = 0, w = 0, h = 0;
+                if (GetMenuItemRect(ownerHwnd, hMenu, i, out itemRect))
+                {
+                    x = itemRect.Left;
+                    y = itemRect.Top;
+                    w = itemRect.Right - itemRect.Left;
+                    h = itemRect.Bottom - itemRect.Top;
+                }
+
+                elements.Add(new Dictionary<string, object> {
+                    {"type", "MenuItem"},
+                    {"name", text},
+                    {"x", x},
+                    {"y", y},
+                    {"width", w},
+                    {"height", h}
+                });
+
+                Debug("  MenuBar[" + i + "]: " + text);
+
+                // Recurse into submenu (one level — dropdown items)
+                IntPtr hSubMenu = GetSubMenu(hMenu, (int)i);
+                if (hSubMenu != IntPtr.Zero)
+                {
+                    int subCount = GetMenuItemCount(hSubMenu);
+                    if (subCount > 0 && subCount < 50)
+                    {
+                        ReadMenuItems(hSubMenu, ownerHwnd, subCount);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            handle.Free();
         }
     }
 
