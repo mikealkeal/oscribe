@@ -24,6 +24,7 @@ import { setupUnityBridge } from '../core/unity-setup.js';
 import { RestrictedActionError } from '../core/security.js';
 import { UserInterruptError, resetKillSwitch, checkResumeSignal } from '../core/killswitch.js';
 import { SessionRecorder, ScreenContext, UIElementContext } from '../core/session-recorder.js';
+import { recognizeText, filterByWindow, deduplicateOcr, formatOcrText, type OcrResult } from '../core/ocr.js';
 
 // Known client image size limits for calculating resize ratio
 // When models receive images larger than their limit, they resize them
@@ -598,8 +599,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const clientVersion = server.getClientVersion();
         const { ratio, clientType } = calculateImageRatio(width, height, clientVersion?.name);
 
-        // Get UI elements - use target window if set, otherwise foreground window
-        const tree = await getUIElements(targetWindow ?? undefined);
+        // Get UI elements and OCR text in parallel
+        const [tree, ocrResult] = await Promise.all([
+          getUIElements(targetWindow ?? undefined),
+          recognizeText(screenshot.buffer)
+            .catch((): OcrResult => ({ lines: [], duration_ms: 0 })),
+        ]);
 
         // On Windows, always get system UI elements (taskbar, etc.)
         // Even if hidden (auto-hide), agent can move mouse to edge to reveal it
@@ -666,6 +671,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               const cy = el.y + Math.floor(el.height / 2);
               return `- ${el.type}: "${el.name}" center=(${cx},${cy}) [${el.width}x${el.height}]${el.automationId ? ` id="${el.automationId}"` : ''}`;
             }).join('\n')
+          : '';
+
+        // Format OCR text elements - filter to focused window, deduplicate against UIA
+        const windowFiltered = tree.windowBounds
+          ? filterByWindow(ocrResult.lines, tree.windowBounds)
+          : ocrResult.lines;
+        const dedupedLines = deduplicateOcr(windowFiltered, [...tree.ui, ...tree.content]);
+        const ocrText = formatOcrText(dedupedLines);
+        const ocrSection = ocrText
+          ? `\n\n📝 Text (OCR) (${dedupedLines.length}):\n${ocrText}`
           : '';
 
         // Check if this is a Chromium browser (needed for warnings and strategy info)
@@ -756,7 +771,7 @@ STEPS TO ENABLE CDP:
           content: [
             {
               type: 'text',
-              text: `${warningFirst}${capturedWindow}\n${focusReminder}\n\n${strategyInfo}\n${imageInfo}\n${ratioHint}${windowBoundsInfo}\n\n${instruction}\n\nCursor position: (${cursor.x}, ${cursor.y})\n\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}${systemText}`,
+              text: `${warningFirst}${capturedWindow}\n${focusReminder}\n\n${strategyInfo}\n${imageInfo}\n${ratioHint}${windowBoundsInfo}\n\n${instruction}\n\nCursor position: (${cursor.x}, ${cursor.y})\n\nElements (${tree.ui.length}):\n${elementsText || 'No interactive elements found'}${ocrSection}${systemText}`,
             },
             {
               type: 'image',

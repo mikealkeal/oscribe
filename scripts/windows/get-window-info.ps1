@@ -2,7 +2,7 @@
 # Returns window name and class for the focused or specified window
 # Usage: powershell -File get-window-info.ps1 [-WindowFilter "Title"]
 #
-# Output: JSON { "name": "...", "className": "..." }
+# Output: JSON { "name": "...", "className": "...", "processName": "...", "bounds": { ... } }
 
 param(
     [string]$WindowFilter = ""
@@ -37,7 +37,7 @@ if ($WindowFilter -ne "") {
 }
 
 if (-not $window -or $window -eq $root) {
-    Write-Output '{"name":"","className":"","processName":""}'
+    Write-Output '{"name":"","className":"","processName":"","bounds":null}'
     exit
 }
 
@@ -53,8 +53,23 @@ try {
     }
 } catch {}
 
+# Get window bounding rectangle
+$bounds = $null
+try {
+    $rect = $window.Current.BoundingRectangle
+    if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [System.Double]::IsInfinity($rect.X)) {
+        $bounds = @{
+            x = [int]$rect.X
+            y = [int]$rect.Y
+            width = [int]$rect.Width
+            height = [int]$rect.Height
+        }
+    }
+} catch {}
+
 @{
     name = $window.Current.Name
     className = $window.Current.ClassName
     processName = $processName
-} | ConvertTo-Json -Compress
+    bounds = $bounds
+} | ConvertTo-Json -Compress -Depth 3

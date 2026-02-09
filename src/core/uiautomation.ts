@@ -313,6 +313,7 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
     content,
     timestamp: new Date().toISOString(),
   };
+  if (windowInfo.bounds) result.windowBounds = windowInfo.bounds;
   if (unityBridgeActive) result.unityBridgeActive = true;
   return result;
 }
@@ -320,7 +321,7 @@ async function getUIElementsWindows(windowTitle?: string): Promise<UITree> {
 /**
  * Get basic window info (name, class, process name)
  */
-async function getWindowInfo(windowTitle?: string): Promise<{ name: string; className: string; processName: string }> {
+async function getWindowInfo(windowTitle?: string): Promise<{ name: string; className: string; processName: string; bounds?: { x: number; y: number; width: number; height: number } }> {
   const scriptPath = join(__dirname, '..', '..', '..', 'scripts', 'windows', 'get-window-info.ps1');
   const windowFilter = windowTitle ? `"${windowTitle}"` : '""';
 

@@ -24,5 +24,7 @@ export * from './browser-restart.js';
 export * from './logger.js';
 export * from './security.js';
 export * from './killswitch.js';
+// OCR text detection
+export * from './ocr.js';
 // Usage tracking
 export * from './token-tracker.js';

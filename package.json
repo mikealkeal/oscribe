@@ -24,6 +24,10 @@
     "./core/uiautomation": {
       "types": "./dist/src/core/uiautomation.d.ts",
       "import": "./dist/src/core/uiautomation.js"
+    },
+    "./core/ocr": {
+      "types": "./dist/src/core/ocr.d.ts",
+      "import": "./dist/src/core/ocr.js"
     }
   },
   "scripts": {
