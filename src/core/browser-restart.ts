@@ -53,7 +53,9 @@ function getDefaultChromeProfilePath(): string {
   if (process.platform === 'darwin') {
     return join(homedir(), 'Library/Application Support/Google/Chrome');
   } else if (process.platform === 'win32') {
-    return join(process.env['APPDATA'] ?? '', 'Google/Chrome/User Data');
+    // Chrome User Data lives in LOCALAPPDATA (Local), NOT APPDATA (Roaming) on modern Windows.
+    // Using APPDATA returns a path that doesn't exist → syncProfileToOScribe() silently fails.
+    return join(process.env['LOCALAPPDATA'] ?? '', 'Google/Chrome/User Data');
   } else {
     // Linux
     return join(homedir(), '.config/google-chrome');
@@ -337,7 +339,7 @@ async function launchBrowserWithCDP(browserType: BrowserType, port = 9222): Prom
 
       const oscribeProfile = getOScribeProfilePath();
 
-      execSync(`open -a "${appName}" --args --remote-debugging-port=${port} --user-data-dir="${oscribeProfile}"`, {
+      execSync(`open -a "${appName}" --args --remote-debugging-port=${port} --user-data-dir="${oscribeProfile}" --profile-directory=Default --no-first-run --no-default-browser-check`, {
         timeout: 5000,
       });
     } else if (process.platform === 'win32') {
@@ -359,7 +361,7 @@ async function launchBrowserWithCDP(browserType: BrowserType, port = 9222): Prom
 
       const oscribeProfile = getOScribeProfilePath();
 
-      execSync(`${command} --remote-debugging-port=${port} --user-data-dir="${oscribeProfile}"`, { timeout: 5000 });
+      execSync(`${command} --remote-debugging-port=${port} --user-data-dir="${oscribeProfile}" --profile-directory=Default --no-first-run --no-default-browser-check`, { timeout: 5000 });
     } else if (process.platform === 'linux') {
       // Linux: Direct binary execution
       const binaries: Record<BrowserType, string> = {
@@ -379,7 +381,7 @@ async function launchBrowserWithCDP(browserType: BrowserType, port = 9222): Prom
 
       const oscribeProfile = getOScribeProfilePath();
 
-      execSync(`${binary} --remote-debugging-port=${port} --user-data-dir="${oscribeProfile}" &`, { timeout: 5000 });
+      execSync(`${binary} --remote-debugging-port=${port} --user-data-dir="${oscribeProfile}" --profile-directory=Default --no-first-run --no-default-browser-check &`, { timeout: 5000 });
     } else {
       throw new Error(`Unsupported platform: ${process.platform}`);
     }
