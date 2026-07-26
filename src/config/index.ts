@@ -56,7 +56,7 @@ export const ConfigSchema = z.object({
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   cursorSize: z.number().min(32).max(256).default(128),
   // Vision settings
-  model: z.string().default('claude-sonnet-4-20250514'),
+  model: z.string().default('claude-sonnet-5'),
   maxTokensLocate: z.number().default(256),
   maxTokensDescribe: z.number().default(1024),
   // OAuth settings
@@ -80,7 +80,7 @@ const DEFAULT_CONFIG: Config = {
   dryRun: false,
   logLevel: 'info',
   cursorSize: 128,
-  model: 'claude-sonnet-4-20250514',
+  model: 'claude-sonnet-5',
   maxTokensLocate: 256,
   maxTokensDescribe: 1024,
   redirectPort: 9876,

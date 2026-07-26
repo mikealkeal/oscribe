@@ -75,6 +75,10 @@ If the element is not found, return {"x": -1, "y": -1, "confidence": 0}`;
       const response = await anthropic.messages.create({
         model: config.model,
         max_tokens: config.maxTokensLocate,
+        // Thinking désactivé volontairement : les modèles récents l'activent par
+        // défaut, or max_tokens plafonne thinking + réponse (troncature à 256) et
+        // un bloc thinking prendrait la place de content[0], que l'on parse en JSON.
+        thinking: { type: 'disabled' },
         messages: [
           {
             role: 'user',
@@ -138,6 +142,8 @@ export async function describeScreen(screenshotBase64: string): Promise<string> 
   const response = await anthropic.messages.create({
     model: config.model,
     max_tokens: config.maxTokensDescribe,
+    // Voir locate() : content[0] est lu comme du texte, pas de bloc thinking attendu.
+    thinking: { type: 'disabled' },
     messages: [
       {
         role: 'user',
@@ -190,6 +196,8 @@ Answer with ONLY "YES" or "NO" followed by a brief explanation (max 20 words).`;
   const response = await anthropic.messages.create({
     model: config.model,
     max_tokens: 128,
+    // Voir locate() : content[0] est lu comme du texte, pas de bloc thinking attendu.
+    thinking: { type: 'disabled' },
     messages: [
       {
         role: 'user',
