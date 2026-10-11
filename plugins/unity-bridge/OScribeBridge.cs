@@ -109,13 +109,13 @@ namespace OScribe.UnityBridge
             return token == null ? 0f : (float)token;
         }
 
-        // Curseur virtuel : pointeur jaune à bordure noire qui reste à la dernière position pendant 30 s,
+        // Curseur virtuel : pointeur jaune à bordure noire qui reste en permanence à la dernière position,
         // avec un anneau rouge qui s'étend 0,8 s à chaque action. Dessiné dans l'image du jeu uniquement.
         void OnGUI()
         {
             if (!_showCursor.Value) return;
             var age = Time.realtimeSinceStartup - InputInjector.LastActionTime;
-            if (age < 0f || age > 30f) return;
+            if (age < 0f) return; // jamais masqué : reste à la dernière position
 
             if (_dot == null)
             {
@@ -126,7 +126,7 @@ namespace OScribe.UnityBridge
 
             GUI.depth = -10000;
             var p = InputInjector.LastPoint;
-            var fade = age < 20f ? 1f : 1f - (age - 20f) / 10f;
+            var fade = age < 5f ? 1f : 0.75f;
 
             if (age < 0.8f)
             {
