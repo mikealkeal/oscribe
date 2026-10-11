@@ -5,6 +5,8 @@ using System.Text;
 using System.Threading;
 using System.Collections.Concurrent;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using UnityEngine;
 
 namespace OScribe.UnityBridge
 {
@@ -63,6 +65,19 @@ namespace OScribe.UnityBridge
                         client.ReceiveTimeout = 5000;
                         client.SendTimeout = 5000;
 
+                        // Commande optionnelle : une trame reçue dans les 150 ms demande une action
+                        // (click, drag, scroll, screenshot, cursor). Sans trame : instantané des éléments (comportement historique).
+                        var command = TryReadCommand(client);
+                        if (command != null)
+                        {
+                            OScribeBridge.PendingCommands.Enqueue(new BridgeCommand
+                            {
+                                Command = command,
+                                Reply = json => SendJson(client, json)
+                            });
+                            continue;
+                        }
+
                         // Queue request to be processed on Unity main thread
                         OScribeBridge.PendingRequests.Enqueue(response =>
                         {
@@ -82,6 +97,66 @@ namespace OScribe.UnityBridge
                 {
                     Debug.LogError($"[OScribe] TCP error: {ex.Message}");
                 }
+            }
+        }
+
+        private static JObject TryReadCommand(TcpClient client)
+        {
+            try
+            {
+                var stream = client.GetStream();
+                for (int i = 0; i < 15 && !stream.DataAvailable; i++) Thread.Sleep(10);
+                if (!stream.DataAvailable) return null;
+
+                var head = new byte[4];
+                if (!ReadExactly(stream, head, 4)) return null;
+                if (BitConverter.IsLittleEndian) Array.Reverse(head);
+                var length = BitConverter.ToInt32(head, 0);
+                if (length <= 0 || length > 65536) return null;
+
+                var body = new byte[length];
+                if (!ReadExactly(stream, body, length)) return null;
+                return JObject.Parse(Encoding.UTF8.GetString(body));
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[OScribe] Command read error: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static bool ReadExactly(NetworkStream stream, byte[] buffer, int count)
+        {
+            var read = 0;
+            while (read < count)
+            {
+                var n = stream.Read(buffer, read, count - read);
+                if (n <= 0) return false;
+                read += n;
+            }
+            return true;
+        }
+
+        private static void SendJson(TcpClient client, string json)
+        {
+            try
+            {
+                var payload = Encoding.UTF8.GetBytes(json);
+                var lengthBytes = BitConverter.GetBytes(payload.Length);
+                if (BitConverter.IsLittleEndian) Array.Reverse(lengthBytes);
+
+                var stream = client.GetStream();
+                stream.Write(lengthBytes, 0, 4);
+                stream.Write(payload, 0, payload.Length);
+                stream.Flush();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[OScribe] Send error: {ex.Message}");
+            }
+            finally
+            {
+                client?.Close();
             }
         }
 
