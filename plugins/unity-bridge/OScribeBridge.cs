@@ -109,12 +109,13 @@ namespace OScribe.UnityBridge
             return token == null ? 0f : (float)token;
         }
 
-        // Curseur virtuel : visible 0,8 s après chaque action, uniquement dans l'image du jeu.
+        // Curseur virtuel : pointeur jaune à bordure noire qui reste à la dernière position pendant 30 s,
+        // avec un anneau rouge qui s'étend 0,8 s à chaque action. Dessiné dans l'image du jeu uniquement.
         void OnGUI()
         {
             if (!_showCursor.Value) return;
             var age = Time.realtimeSinceStartup - InputInjector.LastActionTime;
-            if (age < 0f || age > 0.8f) return;
+            if (age < 0f || age > 30f) return;
 
             if (_dot == null)
             {
@@ -123,16 +124,30 @@ namespace OScribe.UnityBridge
                 _dot.Apply();
             }
 
+            GUI.depth = -10000;
             var p = InputInjector.LastPoint;
-            var radius = 8f + age * 40f;
-            var alpha = 1f - age / 0.8f;
-            GUI.color = new Color(1f, 0.2f, 0.2f, alpha);
-            // Anneau (4 côtés) autour du point + point central
-            GUI.DrawTexture(new Rect(p.x - radius, p.y - radius, radius * 2f, 2f), _dot);
-            GUI.DrawTexture(new Rect(p.x - radius, p.y + radius, radius * 2f, 2f), _dot);
-            GUI.DrawTexture(new Rect(p.x - radius, p.y - radius, 2f, radius * 2f), _dot);
-            GUI.DrawTexture(new Rect(p.x + radius, p.y - radius, 2f, radius * 2f + 2f), _dot);
-            GUI.DrawTexture(new Rect(p.x - 3f, p.y - 3f, 6f, 6f), _dot);
+            var fade = age < 20f ? 1f : 1f - (age - 20f) / 10f;
+
+            if (age < 0.8f)
+            {
+                var radius = 14f + age * 60f;
+                var a = 1f - age / 0.8f;
+                GUI.color = new Color(1f, 0.15f, 0.15f, a);
+                GUI.DrawTexture(new Rect(p.x - radius, p.y - radius, radius * 2f, 3f), _dot);
+                GUI.DrawTexture(new Rect(p.x - radius, p.y + radius, radius * 2f, 3f), _dot);
+                GUI.DrawTexture(new Rect(p.x - radius, p.y - radius, 3f, radius * 2f), _dot);
+                GUI.DrawTexture(new Rect(p.x + radius, p.y - radius, 3f, radius * 2f + 3f), _dot);
+            }
+
+            // Réticule noir (contour) puis jaune, plus un disque central
+            GUI.color = new Color(0f, 0f, 0f, fade);
+            GUI.DrawTexture(new Rect(p.x - 22f, p.y - 3f, 44f, 6f), _dot);
+            GUI.DrawTexture(new Rect(p.x - 3f, p.y - 22f, 6f, 44f), _dot);
+            GUI.DrawTexture(new Rect(p.x - 10f, p.y - 10f, 20f, 20f), _dot);
+            GUI.color = new Color(1f, 0.9f, 0.1f, fade);
+            GUI.DrawTexture(new Rect(p.x - 20f, p.y - 1.5f, 40f, 3f), _dot);
+            GUI.DrawTexture(new Rect(p.x - 1.5f, p.y - 20f, 3f, 40f), _dot);
+            GUI.DrawTexture(new Rect(p.x - 7f, p.y - 7f, 14f, 14f), _dot);
             GUI.color = Color.white;
         }
 
