@@ -194,3 +194,18 @@ Logs dans la console BepInEx (`BepInEx/LogOutput.log`) :
 - **DLL lock** : fermer le jeu avant de remplacer le plugin
 - **Main thread** : les API Unity ne fonctionnent que sur le main thread, d'ou le pattern `ConcurrentQueue` + `Update()`
 - **`{3:F1}}}` bug** : ne pas utiliser `AppendFormat` avec `{{`/`}}` pour des floats, utiliser `ToString("F1", inv)` + `Append()`
+
+## Injection d'entrées (v1.1, version complète uniquement)
+
+Le pont accepte aussi des commandes : le client envoie une trame `[4 octets de longueur big-endian][JSON]` dans les 150 ms suivant la connexion. Sans trame, le comportement reste celui d'avant (instantané des éléments). **Aucune souris Windows n'est utilisée** : les clics passent par l'`EventSystem` d'Unity, le jeu n'a pas besoin du focus (`RunInBackground`, activé par défaut).
+
+| Commande | Corps JSON | Effet |
+|---|---|---|
+| click | `{"cmd":"click","x":640,"y":400}` | `pointerEnter/Down/Up/Click` sur l'élément sous le point ; la réponse donne `hit` et `handler` |
+| scroll | `{"cmd":"scroll","x":600,"y":450,"dy":-3}` | `scrollHandler` |
+| drag | `{"cmd":"drag","x":835,"y":365,"x2":520,"y2":420}` | appui, 12 pas de déplacement, dépôt (`dropHandler`) |
+| screenshot | `{"cmd":"screenshot"}` | PNG en base64 du rendu du jeu (visible même si une autre fenêtre le recouvre) |
+| cursor | `{"cmd":"cursor","show":true}` | curseur virtuel (anneau rouge 0,8 s) dessiné dans le jeu |
+
+Coordonnées : fenêtre du jeu, origine en haut à gauche (celles des `ScreenRect`). Config BepInEx : `Input/ShowVirtualCursor`, `Input/RunInBackground`.
+Testé sur Soccer Manager 2027 (Unity Mono, TextMeshPro) : clic sans mouvement de souris, capture interne, jeu actif en arrière-plan.
